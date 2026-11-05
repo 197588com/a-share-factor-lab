@@ -1,0 +1,50 @@
+# walk-forward 滚动窗口配置（framework_design.md 1.3：切分由配置生成，禁止手写）
+# 改这里即可改变整个 walk-forward 的形状；fold 由 wf_pipeline.py 据此推导。
+
+data:
+  universe: csi300
+  handler: Alpha158
+  start: "2008-01-01"        # 首个 fold 训练起点（对齐 qlib 官方 benchmark 口径）
+  end: "2026-12-31"          # 末个 fold 测试终点；qlib 数据实际到 2026-11-03，fold11 测试年为不完整自然年（Jan-Nov）
+  label: "Ref($close,-2)/Ref($close,-1)-1"   # 1 日前向收益，与 P0 基线同口径
+  processors:
+    infer_processors:
+      - class: RobustZScoreNorm
+        kwargs: {fields_group: feature, clip_outlier: true}
+      - class: Fillna
+        kwargs: {fields_group: feature}
+    learn_processors:
+      - class: DropnaLabel
+
+walkforward:
+  train_years: 6             # 每 fold：训练 6 年 / 验证 1 年 / 测试 1 年，年步进
+  valid_years: 1
+  test_years: 1
+  step_months: 12
+
+models:
+  alstm:
+    epochs: 20
+    lr: 0.001
+    hidden: 64
+    num_layers: 2
+    batch_size: 256
+  master:
+    epochs: 40               # 对齐 MASTER 官方 benchmark 训练强度
+    lr: 0.00003
+    d_model: 128
+    t_nhead: 4
+    s_nhead: 2
+    dropout: 0.5
+    beta: 5.0
+    batch_size: 256
+
+tracking:
+  experiment_prefix: "factorlab-wf"   # MLflow 实验名 = {prefix}-{model}
+  mlruns_dir: "mlruns"                # 本地文件存储，mlflow ui 可查看
+  ckpt_dir: "ckpt/wf"                 # 每 fold 检查点（支持断点续训）
+
+retrain:
+  epochs_per_run: 4          # 每周增量训练的 epoch 预算（断点续训粒度）
+  gate_csv_end: "2022-12-31"  # MASTER 门控文件可用截止；此后仅 ALSTM 可再训练
+  hmm_roll: true             # 再训练前同步做 HMM 滚动重估（source=hmm_roll）
