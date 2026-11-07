@@ -1,0 +1,14 @@
+{
+ "days": 192,
+ "R2_total": -0.021534,
+ "Align_rho2": 2.1e-05,
+ "rho": 0.004569,
+ "AggrLoss": 0.021555,
+ "b_star": 0.0302,
+ "IC_mean": 0.006409,
+ "IC_std": 0.148217,
+ "Instab_CV": 23.1251,
+ "NegDayShare": 0.4479,
+ "fold": 11,
+ "model": "dragon"
+}

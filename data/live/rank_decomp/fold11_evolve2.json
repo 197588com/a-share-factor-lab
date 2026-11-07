@@ -1,0 +1,14 @@
+{
+ "days": 192,
+ "R2_total": -0.014476,
+ "Align_rho2": 3e-05,
+ "rho": 0.005496,
+ "AggrLoss": 0.014506,
+ "b_star": 0.0436,
+ "IC_mean": 0.007148,
+ "IC_std": 0.142247,
+ "Instab_CV": 19.9012,
+ "NegDayShare": 0.4062,
+ "fold": 11,
+ "model": "evolve2"
+}
