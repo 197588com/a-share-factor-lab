@@ -156,6 +156,8 @@ def train(g):
 def evaluate(g):
     import torch
     from torch.utils.data import DataLoader
+    from holdout_guard import assert_window_allowed
+    import candidate_ledger as led
     cfg = load_cfg()
     cache, ckdir, d_feat, report = group_paths(g)
     blob = pickle.load(open(cache, "rb"))
@@ -164,6 +166,13 @@ def evaluate(g):
     model = ALSTMN(d_feat, hidden=mc.get("hidden", 64), num_layers=mc.get("num_layers", 2)).to(tm.DEVICE)
     st = torch.load(os.path.join(ckdir, "fold_11.pt.best"), map_location=tm.DEVICE, weights_only=False)
     model.load_state_dict(st["model"])
+    # U1 封存守卫 + U2 探针落账：增量测试是探针（probe），不计入 Bonferroni 的 n
+    if not os.path.exists(report):
+        tidx = wf.seg_indices(blob, "test")
+        assert_window_allowed(str(meta["dates"][tidx[0]]), str(meta["dates"][tidx[-1]]),
+                              purpose=os.environ.get("ASFL_EVAL_PURPOSE", "candidate"))
+        led.record(f"increment_probe_{g}", "probe", "wf_folds8-11", "observed",
+                   notes="increment_test evaluate 探针观测（非终审判决，不计 n）")
     out = {}
     for seg, name in (("valid", "valid2025"), ("test", "test2026")):
         ds_set = tm.DSWithDate(*panels[seg], G, wf.seg_indices(blob, seg), False)

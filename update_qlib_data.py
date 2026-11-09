@@ -74,13 +74,16 @@ def update_one(qc, full_refetch=False):
             if add.empty:
                 return True
             # 除权检测：旧末行收盘价的复权因子对比
+            # 容差仅为 4 位小数舍入级（相对 1e-3 或绝对 0.005 元，取大者）——
+            # 旧版 2% 门控会漏掉 <2% 的常规分红（A 股常见 0.3%~1.5%），导致历史前复权价陈旧
             last_date = old["date"].iloc[-1]
             fa = f.set_index("trade_date")["adj_factor"]
             if last_date.replace("-", "") in fa.index:
                 k_old_row = old["close"].iloc[-1]
                 d_all = pro.daily(ts_code=ts_code, start_date=last_date.replace("-", ""), end_date=last_date.replace("-", ""))
                 raw_close = d_all["close"].iloc[0] if d_all is not None and not d_all.empty else None
-                if raw_close and abs(raw_close - k_old_row) / max(raw_close, 1e-9) > 0.02:
+                tol = max(abs(raw_close) * 1e-3, 0.005) if raw_close else None
+                if raw_close and abs(raw_close - k_old_row) > tol:
                     return update_one(qc, full_refetch=True)  # 发生除权，全量重抓
             new = pd.concat([old, add], ignore_index=True).sort_values("date")
         new.to_csv(os.path.join(CSV_DIR, f"{qc}.csv"), index=False)

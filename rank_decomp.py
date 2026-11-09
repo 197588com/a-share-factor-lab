@@ -91,6 +91,7 @@ def decompose(ps, ys, dates_idx, meta_dates):
 def run_fold(fold_id):
     import torch
     from torch.utils.data import DataLoader
+    from holdout_guard import assert_window_allowed
     cfg = wf.load_config()
     mc = cfg["models"]["alstm"]
     for name, cols in model_specs():
@@ -115,6 +116,11 @@ def run_fold(fold_id):
         st = torch.load(ck, map_location=tm.DEVICE, weights_only=False)
         model.load_state_dict(st["model"])
         panels, G, meta = blob["panels"], blob["G"], blob["meta"]
+        # U1 封存守卫：默认 candidate 硬拦截；既有诊断复算须显式 ASFL_EVAL_PURPOSE=audit
+        if not os.path.exists(out):
+            tidx = wf.seg_indices(blob, "test")
+            assert_window_allowed(str(meta["dates"][tidx[0]]), str(meta["dates"][tidx[-1]]),
+                                  purpose=os.environ.get("ASFL_EVAL_PURPOSE", "candidate"))
         ds_set = tm.DSWithDate(*panels["test"], G, wf.seg_indices(blob, "test"), False)
         ps, ys, dd = tm.predict(model, DataLoader(ds_set, batch_size=2048, shuffle=False))
         res = decompose(ps, ys, dd, meta["dates"])

@@ -29,12 +29,21 @@ def is_sealed(d):
     return _d(d) >= HOLDOUT_SEALED_FROM
 
 
-def assert_window_allowed(start, end):
-    """候选评估窗口 [start, end] 不得触碰封存区。"""
-    if is_sealed(end) or is_sealed(start):
-        raise SealedHoldoutError(
-            f"窗口 {start}~{end} 触碰一次性终审保留区（封存自 {HOLDOUT_SEALED_FROM}）。"
-            f"该数据只能用于日常信号/台账运维，或按 U1 预定的开封条件使用。")
+def assert_window_allowed(start, end, purpose="candidate"):
+    """窗口 [start, end] 不得触碰封存区。
+
+    purpose="candidate"（默认）：抛异常，硬拦截。
+    purpose="audit"：不改判任何候选、只重算既有产物上的既有诊断时可放行，
+        但必须显式传入并打印警告；新判决一律不得用 audit 模式。
+    """
+    if not (is_sealed(end) or is_sealed(start)):
+        return
+    msg = (f"窗口 {start}~{end} 触碰一次性终审保留区（封存自 {HOLDOUT_SEALED_FROM}）。")
+    if purpose == "audit":
+        print(f"[holdout_guard:audit] {msg} 本次运行为诊断复算，不产生新判决。")
+        return
+    raise SealedHoldoutError(
+        msg + "该数据只能用于日常信号/台账运维，或按 U1 预定的开封条件使用。")
 
 
 def allowed_test_ceiling():

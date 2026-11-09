@@ -153,8 +153,8 @@ class Account:
         px = opx * (1 - PARAMS["slip"])
         ratio = limit_ratio(code, names)
         one_way = float(bar["$high"]) == float(bar["$low"])
-        # 开盘价执行：一字跌停（开盘即封死）卖不出
-        if one_way and opx <= bar["__pre"] * (1 - ratio) + 0.005:
+        # 开盘价即跌停（含一字）卖不出——按 D+1 开盘价判，非 T 日涨跌幅代理
+        if opx <= bar["__pre"] * (1 - ratio) + 0.005:
             self.log_order(d, sd, code, "SELL", 0, px, 0, 0, "BLOCKED", "一字跌停卖不出")
             return False
         value = p["qty"] * px
@@ -175,8 +175,9 @@ class Account:
             self.log_order(d, sd, code, "BUY", 0, px, 0, 0, "BLOCKED",
                            f"跳空超限放弃 open>{PARAMS['gap_max']*100:.1f}%")
             return False
-        # 一字涨停（开盘即封死）买不进
-        if one_way and opx >= bar["__pre"] * (1 + ratio) - 0.005:
+        # 开盘价即涨停（含一字）买不进——按 D+1 开盘价判，非 T 日涨跌幅代理；
+        # 开盘=涨停价时买方队列封死，开盘后有打开也难以成交，统一按不可买记账
+        if opx >= bar["__pre"] * (1 + ratio) - 0.005:
             self.log_order(d, sd, code, "BUY", 0, px, 0, 0, "BLOCKED", "一字涨停买不进")
             return False
         qty = int(min(target_value, self.cash) / px / PARAMS["lot"]) * PARAMS["lot"]

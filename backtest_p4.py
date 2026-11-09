@@ -22,31 +22,47 @@ OUT_DIR = os.path.join(WS, "data", "backtest")
 
 
 def mask_limit_up(pred):
-    """涨停不可买近似：信号预处理阶段把涨停日买入候选分数置 NaN。
-    自转数据无 $change/$limit 字段，用 $close 手工算涨跌幅；
-    主板 ±9.8%、创业板(300)2020-08-24 后 ±19.8%、科创板(688)±19.8%。
+    """涨停不可买：双闸门——
+    ① T 日收盘涨停（T 日涨幅代理，保守侧：收盘封板次日大概率高开/续板，挡）；
+    ② 执行日 T+1 开盘即涨停（open ≥ T收盘×(1+涨停幅)-0.005，真实不可成交口径）。
+    自转数据无 $change/$limit 字段，用 $close/$open 手工算；
+    主板 ±9.8%、创业板(300)2020-08-24 后 ±19.8%、科创板(688)±19.8%、ST ±4.8%（无 name 表，主板近似）。
     只挡买入不挡卖出（卖出侧需交易所级撮合支持，列为诚实清单近似）。"""
     import qlib
     from qlib.config import REG_CN
     from qlib.data import D
     qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
     insts = sorted(pred.index.get_level_values("instrument").unique())
-    px = D.features(insts, ["$close"], start_time=pred.index.get_level_values("datetime").min(),
-                    end_time=pred.index.get_level_values("datetime").max()).squeeze()
-    chg = px.groupby(level="instrument").pct_change().swaplevel().sort_index()
-    df = pred.to_frame("score").join(chg.rename("chg"), how="left")
+    px = D.features(insts, ["$close", "$open"],
+                    start_time=pred.index.get_level_values("datetime").min(),
+                    end_time=pred.index.get_level_values("datetime").max())
+    # D.features 返回 index(instrument, datetime)、列=字段；对齐到 pred 的 (datetime, instrument)
+    close = px["$close"].swaplevel().sort_index()
+    open_ = px["$open"].swaplevel().sort_index()
+    chg = close.groupby(level="instrument").pct_change()
+    # 执行日开盘 vs 信号日收盘（同一行 t：open 取 t+1 需 shift(-1)）
+    nxt_open = open_.groupby(level="instrument").shift(-1)
+    open_gap = (nxt_open / close - 1)
+    df = pred.to_frame("score").join(chg.rename("chg"), how="left").join(open_gap.rename("ogap"), how="left")
     code = df.index.get_level_values("instrument").str[2:]
     board = np.where(code.str.startswith("68"), 0.198,
                      np.where(code.str.startswith("30"), 0.198, 0.098))
     date = df.index.get_level_values("datetime")
     gem20 = (code.str.startswith("30")) & (date >= pd.Timestamp("2020-08-24"))
     thr = np.where(gem20, 0.198, board)
+    n_mask_t = int((df["chg"] >= thr).sum())
     df.loc[df["chg"] >= thr, "score"] = np.nan
+    # T+1 开盘即涨停：open ≥ T收盘×(1+幅)−0.005 ⇔ ogap ≥ 幅 − 0.005/T收盘
+    close_t = close.reindex(df.index)
+    ogap_th = thr - 0.005 / close_t.to_numpy(dtype=float).clip(min=1e-9)
+    n_mask_open = int((df["score"].notna() & (df["ogap"].to_numpy(dtype=float) >= ogap_th)).sum())
+    df.loc[df["ogap"].to_numpy(dtype=float) >= ogap_th, "score"] = np.nan
+    print(f"mask_limit_up: T日封板挡 {n_mask_t} 格，T+1开盘涨停挡 {n_mask_open} 格", flush=True)
     out = df["score"].dropna()
     return out
 
 
-def run_bt(pred, start, end, open_cost, close_cost):
+def run_bt(pred, start, end, open_cost, close_cost, name=None):
     import qlib
     from qlib.config import REG_CN
     from qlib.backtest import backtest
@@ -71,6 +87,11 @@ def run_bt(pred, start, end, open_cost, close_cost):
     nav = (1 + ret - cost).cumprod()
     mdd = float((nav / nav.cummax() - 1).min())
     turnover = float(report_df["turnover"].mean()) if "turnover" in report_df else float("nan")
+    if name:  # 日度收益序列持久化：DSR 正确输入（策略收益非 IC）与超额归因的事实源
+        os.makedirs(os.path.join(OUT_DIR, "daily"), exist_ok=True)
+        dp = os.path.join(OUT_DIR, "daily", f"{name}.parquet")
+        report_df[["return", "bench", "cost"]].assign(
+            excess=excess).reset_index().to_parquet(dp, index=False)
     return {"days": len(report_df), "ann_excess": float(ann), "ir": float(ir), "mdd": mdd,
             "turnover": turnover, "total_cost": float(cost.sum())}
 
@@ -112,7 +133,8 @@ def main():
                           header=None)[0].tolist()
         if str(last_dt)[:10] >= cal[-1]:
             pred = pred[pred.index.get_level_values("datetime") < last_dt]
-        r = run_bt(pred, f["test"][0], f["test"][1], a.open_cost, a.close_cost)
+        r = run_bt(pred, f["test"][0], f["test"][1], a.open_cost, a.close_cost,
+                   name=f"{a.model}_fold{i}_{tag}")
         r.update({"model": a.model, "fold": i, "test_year": f["test"][0][:4], "cost_tag": tag})
         rows.append(r)
         print(f"{a.model}_fold{i} ({r['test_year']}) [{tag}]: ann_excess={r['ann_excess']*100:.2f}% "
