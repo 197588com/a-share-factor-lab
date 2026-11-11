@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  button, input, select, textarea { font: inherit; }
+  svg text { font-family: var(--kimi-font-sans); }
+  .wrap { padding-block-start: var(--kimi-space-4); padding-inline: var(--kimi-space-4); padding-block-end: var(--kimi-space-4); }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-block-end: var(--kimi-space-3); }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: 2px; }
+  .dsr-row { display: flex; align-items: baseline; gap: var(--kimi-space-3); margin-block-end: var(--kimi-space-2); }
+  .dsr { font-size: 34px; font-weight: 500; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .dsr-sub { font-size: 12px; color: var(--kimi-color-text-secondary); }
+  .headline { font-size: 13px; color: var(--kimi-color-text-secondary); margin-block-end: var(--kimi-space-3); }
+  .sec-label { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block: var(--kimi-space-2) var(--kimi-space-1); }
+  .prog { position: relative; height: 8px; border-radius: var(--kimi-radius-full); background: var(--kimi-color-surface-muted); margin-block: var(--kimi-space-1) var(--kimi-space-2); }
+  .prog-fill { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: var(--kimi-radius-full); background: var(--kimi-color-text-primary); }
+  .prog-val { position: absolute; inset-block-start: -22px; transform: translateX(-50%); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .gauge { position: relative; height: 8px; border-radius: var(--kimi-radius-full); background: var(--kimi-color-surface-muted); margin-block: var(--kimi-space-3) var(--kimi-space-2); }
+  .gauge-fill { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: var(--kimi-radius-full); background: var(--kimi-chart-1); }
+  .gauge-mark { position: absolute; inset-block: -3px; width: 1.5px; background: var(--kimi-color-text-quaternary); }
+  .gauge-val { position: absolute; inset-block-start: -22px; transform: translateX(-50%); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .cum { display: flex; gap: var(--kimi-space-3); font-size: 12px; color: var(--kimi-color-text-secondary); margin-block-end: var(--kimi-space-2); }
+  .cum b { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--kimi-color-danger); }
+  .neg { color: var(--kimi-color-positive); }
+  .spark { width: 100%; height: 48px; display: block; }
+  .foot { font-size: 12px; color: var(--kimi-color-text-quaternary); margin-block-start: var(--kimi-space-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="title">DSR 实盘复算</div>
+      <div class="meta" id="meta">等待数据…</div>
+    </div>
+    <span class="kimi-status" id="badge">—</span>
+  </div>
+  <div class="dsr-row">
+    <span class="dsr" id="dsr">—</span>
+    <span class="dsr-sub" id="dsrSub"></span>
+  </div>
+  <div class="headline" id="headline"></div>
+  <div class="sec-label" id="progLabel">样本进度（≥60 交易日才出 DSR 结论）</div>
+  <div class="prog" id="prog"><div class="prog-fill" id="progFill"></div></div>
+  <div class="sec-label" id="gaugeLabel" style="display:none">DSR vs 上线闸门 0.95</div>
+  <div class="gauge" id="gauge" style="display:none">
+    <div class="gauge-fill" id="gaugeFill"></div>
+    <div class="gauge-mark" style="left:95%"></div>
+  </div>
+  <div class="cum" id="cum"></div>
+  <div class="sec-label">超额累计趋势（每日跑一次模拟账户即在累积）</div>
+  <svg class="spark" id="spark" viewBox="0 0 300 48" preserveAspectRatio="none"></svg>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function () {
+  var STATUS = {
+    insufficient: { cls: 'kimi-status--accent',   label: '样本积累中' },
+    passed:       { cls: 'kimi-status--positive', label: '过闸' },
+    failed:       { cls: 'kimi-status--danger',   label: '未过闸' },
+    error:        { cls: 'kimi-status--danger',   label: '运行失败' }
+  };
+  function pct(x, d) { return (x >= 0 ? '+' : '') + (x * 100).toFixed(d === undefined ? 2 : d) + '%'; }
+  function render(d) {
+    var s = STATUS[d.status] || STATUS.error;
+    var badge = document.getElementById('badge');
+    badge.className = 'kimi-status ' + s.cls;
+    badge.textContent = d.statusCN || s.label;
+    document.getElementById('meta').textContent = d.asOf ? ('复算日 ' + d.asOf + (d.window ? ' · ' + d.window : '')) : '';
+    document.getElementById('headline').textContent = d.headline || '';
+
+    if (d.status === 'error') { document.getElementById('dsr').textContent = '—'; return; }
+
+    var ready = typeof d.dsr === 'number';
+    document.getElementById('dsr').textContent = ready ? d.dsr.toFixed(3) : '—';
+    document.getElementById('dsrSub').textContent = ready
+      ? ('PSR ' + d.psr.toFixed(3) + (d.srAnn !== undefined ? ' · 年化SR ' + d.srAnn.toFixed(2) : '') +
+         ' · trials=' + (d.nTrials === undefined ? '—' : d.nTrials))
+      : (d.nTrials !== undefined ? 'trials=' + d.nTrials + '（随账本收紧）' : '');
+
+    var need = d.needDays || 60;
+    var p = Math.min((d.nDays || 0) / need, 1);
+    document.getElementById('progFill').style.width = p * 100 + '%';
+    var pv = document.createElement('div');
+    pv.className = 'prog-val';
+    pv.style.left = Math.max(p * 100, 6) + '%';
+    pv.textContent = (d.nDays || 0) + '/' + need + ' 日';
+    document.getElementById('prog').appendChild(pv);
+
+    if (ready) {
+      document.getElementById('gaugeLabel').style.display = '';
+      document.getElementById('gauge').style.display = '';
+      var gf = document.getElementById('gaugeFill');
+      gf.style.width = Math.min(d.dsr / 1.2, 1) * 100 + '%';
+      var gv = document.createElement('div');
+      gv.className = 'gauge-val';
+      gv.style.left = Math.min(d.dsr / 1.2, 1) * 100 + '%';
+      gv.textContent = d.dsr.toFixed(3);
+      document.getElementById('gauge').appendChild(gv);
+    }
+
+    var cum = document.getElementById('cum');
+    cum.innerHTML = '';
+    [['账户', d.navTotal], ['基准', d.benchTotal], ['超额', d.excessTotal]].forEach(function (kv) {
+      if (typeof kv[1] !== 'number') return;
+      var span = document.createElement('span');
+      span.innerHTML = kv[0] + ' <b class="' + (kv[1] >= 0 ? 'pos' : 'neg') + '">' + pct(kv[1], 2) + '</b>';
+      cum.appendChild(span);
+    });
+
+    var hist = (d.history || []).filter(function (h) { return typeof h.excessTotal === 'number'; });
+    var svg = document.getElementById('spark');
+    var W = 300, H = 48, pad = 4;
+    if (hist.length < 2) {
+      svg.innerHTML = '<text x="150" y="26" text-anchor="middle" class="kimi-svg-text-secondary" font-size="11">月度累积中，次月见趋势</text>';
+    } else {
+      var vals = hist.map(function (h) { return h.excessTotal; });
+      var vmax = Math.max.apply(null, vals.concat([0]));
+      var vmin = Math.min.apply(null, vals.concat([0]));
+      var span = (vmax - vmin) || 1;
+      var xs = function (i) { return pad + i * (W - 2 * pad) / (hist.length - 1); };
+      var ys = function (v) { return H - pad - ((v - vmin) / span) * (H - 2 * pad); };
+      var html = '<line x1="' + pad + '" y1="' + ys(0) + '" x2="' + (W - pad) + '" y2="' + ys(0) +
+                 '" stroke="var(--kimi-color-text-quaternary)" stroke-width="1"/>';
+      var pts = hist.map(function (h, i) { return xs(i).toFixed(1) + ',' + ys(h.excessTotal).toFixed(1); }).join(' ');
+      var color = vals[vals.length - 1] >= 0 ? 'var(--kimi-color-danger)' : 'var(--kimi-color-positive)';
+      html += '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2"/>';
+      hist.forEach(function (h, i) {
+        html += '<circle cx="' + xs(i).toFixed(1) + '" cy="' + ys(h.excessTotal).toFixed(1) + '" r="2.5" fill="' + color + '"/>';
+      });
+      var last = hist[hist.length - 1];
+      html += '<text x="' + (W - pad) + '" y="' + (ys(last.excessTotal) - 5) + '" text-anchor="end" class="kimi-svg-text-primary" font-size="10">' +
+              pct(last.excessTotal, 2) + '</text>';
+      svg.innerHTML = html;
+    }
+    document.getElementById('foot').textContent =
+      '口径：sim_v2 可执行账户日超额 vs 沪深300 · 与 wf 口径 DSR（0.786）两数并读 · 每月 2 日复算';
+  }
+  var api = window.DaimonWidget;
+  render((api && api.data && api.data.main) || {});
+  if (api && api.onDataChange) {
+    api.onDataChange(function (change) { if (change.data && change.data.main) render(change.data.main); });
+  }
+})();
+</script>
+</body>
+</html>

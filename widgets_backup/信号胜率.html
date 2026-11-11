@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>信号胜率</title>
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  .wrap { padding-block-start: var(--kimi-space-4); padding-inline: var(--kimi-space-4); padding-block-end: var(--kimi-space-4); }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--kimi-space-3); }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .main { display: flex; align-items: flex-end; gap: var(--kimi-space-4); margin-block-start: var(--kimi-space-3); }
+  .big { font-size: 40px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+  .biglab { font-size: 12px; color: var(--kimi-color-text-secondary); margin-block-start: var(--kimi-space-1); }
+  .refs { font-size: 12px; color: var(--kimi-color-text-tertiary); line-height: 1.7; padding-block-end: 2px; }
+  .refs b { font-weight: 500; color: var(--kimi-color-text-secondary); font-variant-numeric: tabular-nums; }
+  .pos { color: var(--kimi-chart-1); }
+  .neg { color: var(--kimi-chart-2); }
+  .zero { color: var(--kimi-color-text-quaternary); }
+  .chart { border: 1px solid var(--kimi-color-border); border-radius: var(--kimi-radius-panel); margin-block-start: var(--kimi-space-3); padding: var(--kimi-space-3); }
+  .chart h3 { margin: 0 0 var(--kimi-space-2); font-size: 12px; font-weight: 400; color: var(--kimi-color-text-secondary); display: flex; justify-content: space-between; }
+  .legend { display: inline-flex; gap: var(--kimi-space-3); font-size: 11px; }
+  .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-inline-end: 4px; vertical-align: middle; }
+  .empty { border: 1px dashed var(--kimi-color-border); border-radius: var(--kimi-radius-panel); padding: var(--kimi-space-6) var(--kimi-space-4); text-align: center; margin-block-start: var(--kimi-space-3); }
+  .empty p { margin: 0; font-size: 14px; color: var(--kimi-color-text-secondary); }
+  .foot { display: flex; flex-wrap: wrap; gap: var(--kimi-space-3); margin-block-start: var(--kimi-space-3); font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .foot b { font-weight: 500; color: var(--kimi-color-text-secondary); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <span class="title">信号胜率 · top10 组合</span>
+    <span class="meta" id="ranAt">—</span>
+  </div>
+  <div class="empty" id="empty"><p>暂无结算样本</p></div>
+  <div id="body" hidden>
+    <div class="main">
+      <div>
+        <div class="big zero" id="bigWin">—</div>
+        <div class="biglab" id="bigLab">h=1 实盘胜率（0 天）</div>
+      </div>
+      <div class="refs" id="refs"></div>
+    </div>
+    <div class="chart">
+      <h3><span>滚动 20 日胜率：实盘 vs 历史回测带</span>
+        <span class="legend">
+          <span><i style="background:var(--kimi-chart-1)"></i>实盘</span>
+          <span><i style="background:var(--kimi-color-text-quaternary)"></i>历史 2015-2026</span>
+        </span></h3>
+      <svg id="chart" width="100%" height="150" viewBox="0 0 600 150" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="foot" id="foot"></div>
+  </div>
+</div>
+<script>
+(function () {
+  function pct(x, d) { return (x == null || !isFinite(x)) ? "—" : (x * 100).toFixed(d == null ? 1 : d) + "%"; }
+  function cls(x) { return x == null ? "zero" : (x > 0.5 ? "pos" : (x < 0.5 ? "neg" : "zero")); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function drawChart(hist, live) {
+    var svg = document.getElementById("chart");
+    var W = 600, H = 150, P = 8;
+    var lo = 0.2, hi = 0.85;
+    function Y(v) { return H - P - (v - lo) * (H - 2 * P) / (hi - lo); }
+    var s = "";
+    // 网格线与阈值线
+    [0.5, 0.5223].forEach(function (v, i) {
+      s += '<line x1="' + P + '" y1="' + Y(v) + '" x2="' + (W - P) + '" y2="' + Y(v) + '" stroke="' +
+        (i === 0 ? "var(--kimi-color-border)" : "var(--kimi-chart-3, #d4a017)") + '" stroke-width="' + (i === 0 ? 0.8 : 1) + '" ' +
+        (i === 1 ? 'stroke-dasharray="5 4"' : "") + '/>';
+    });
+    s += '<text x="' + (W - P) + '" y="' + (Y(0.5) - 3) + '" text-anchor="end" font-size="9" fill="var(--kimi-color-text-tertiary)">50% 掷硬币</text>';
+    s += '<text x="' + P + '" y="' + (Y(0.5223) - 3) + '" font-size="9" fill="#d4a017">52.2% 及格线（top50 样本外）</text>';
+    function path(series, key) {
+      var pts = series.filter(function (p) { return p && p.v != null; });
+      if (pts.length < 2) return "";
+      var step = (W - 2 * P) / (pts.length - 1);
+      var d = "";
+      pts.forEach(function (p, i) { d += (i ? " L" : "M") + (P + i * step).toFixed(1) + " " + Y(Math.max(lo, Math.min(hi, p.v))).toFixed(1); });
+      return d;
+    }
+    if (hist && hist.length) s += '<path d="' + path(hist, "v") + '" fill="none" stroke="var(--kimi-color-text-quaternary)" stroke-width="1.1" opacity="0.7"/>';
+    if (live && live.length) s += '<path d="' + path(live, "v") + '" fill="none" stroke="var(--kimi-chart-1)" stroke-width="2"/>';
+    svg.innerHTML = s;
+  }
+
+  function render(data) {
+    if (!data) return;
+    document.getElementById("ranAt").textContent = "更新于 " + (data.ranAt || "—").slice(5, 16).replace("T", " ");
+    var h1 = (data.live || {}).h1;
+    var has = h1 && h1.days > 0;
+    document.getElementById("empty").hidden = has;
+    document.getElementById("body").hidden = !has;
+    if (!has) return;
+    var wr = h1.winRate;
+    var el = document.getElementById("bigWin");
+    el.textContent = pct(wr);
+    el.className = "big " + cls(wr);
+    document.getElementById("bigLab").textContent = "h=1 实盘胜率（" + h1.days + " 天）· 均值超额 " + pct(h1.meanExcess, 2);
+    var hr = data.histRef || {};
+    document.getElementById("refs").innerHTML =
+      "历史基准（" + (hr.histDays || 0) + " 测试日）<br>" +
+      "top10 <b>" + pct(hr.top10Win) + "</b> · top50 <b>" + pct(hr.top50Win) + "</b><br>" +
+      "样本外 top10 <b>" + pct(hr.oosTop10Win) + "</b> · top50 <b>" + pct(hr.oosTop50Win) + "</b>";
+    drawChart(hr.rollSeries, (h1.rolling || []));
+    var h5 = (data.live || {}).h5, h21 = (data.live || {}).h21;
+    document.getElementById("foot").innerHTML =
+      '<span>h=5 <b>' + (h5 ? pct(h5.winRate) + "（" + h5.days + " 天）" : "待结算") + '</b></span>' +
+      '<span>h=21 <b>' + (h21 ? pct(h21.winRate) + "（" + h21.days + " 天）" : "待结算") + '</b></span>' +
+      '<span>数据至 <b>' + esc((data.asOf || "—").slice(0, 10)) + '</b></span>';
+  }
+
+  var api = window.DaimonWidget;
+  if (api && api.onDataChange) {
+    const pick = function (m) { return (m && m.winrate) ? ((m.winrate.ok && m.winrate.artifact) || {summary: "胜率阶段失败：" + ((m.winrate || {}).error || "?")}) : m; };
+    render(pick(api.data && api.data.main));
+    api.onDataChange(function (d) { render(pick(d && d.main)); });
+  }
+})();
+</script>
+</body>
+</html>

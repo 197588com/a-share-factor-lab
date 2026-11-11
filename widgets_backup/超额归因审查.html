@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  button, input, select, textarea { font: inherit; }
+  svg text { font-family: var(--kimi-font-sans); }
+  .wrap { padding-block-start: var(--kimi-space-4); padding-inline: var(--kimi-space-4); padding-block-end: var(--kimi-space-4); }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-block-end: var(--kimi-space-3); }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: 2px; }
+  .alpha-row { display: flex; align-items: baseline; gap: var(--kimi-space-3); margin-block-end: var(--kimi-space-2); }
+  .alpha { font-size: 34px; font-weight: 500; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .alpha-sub { font-size: 12px; color: var(--kimi-color-text-secondary); }
+  .headline { font-size: 13px; color: var(--kimi-color-text-secondary); margin-block-end: var(--kimi-space-3); }
+  .sec-label { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block: var(--kimi-space-2) var(--kimi-space-1); }
+  .gauge { position: relative; height: 8px; border-radius: var(--kimi-radius-full); background: var(--kimi-color-surface-muted); margin-block: var(--kimi-space-1) var(--kimi-space-2); }
+  .gauge-fill { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: var(--kimi-radius-full); background: var(--kimi-color-text-primary); }
+  .gauge-mark { position: absolute; inset-block: -3px; width: 1.5px; background: var(--kimi-color-text-quaternary); }
+  .gauge-val { position: absolute; inset-block-start: -22px; transform: translateX(-50%); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--kimi-space-1); }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: var(--kimi-radius-chip); background: var(--kimi-color-surface-muted); font-variant-numeric: tabular-nums; }
+  .spark { width: 100%; height: 56px; display: block; }
+  .foot { font-size: 12px; color: var(--kimi-color-text-quaternary); margin-block-start: var(--kimi-space-2); }
+  .err { color: var(--kimi-color-danger); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="title">超额归因审查</div>
+      <div class="meta" id="meta">等待数据…</div>
+    </div>
+    <span class="kimi-status" id="badge">—</span>
+  </div>
+  <div class="alpha-row">
+    <span class="alpha" id="alpha">—</span>
+    <span class="alpha-sub" id="alphaSub"></span>
+  </div>
+  <div class="headline" id="headline"></div>
+  <div class="sec-label">做空波动率暴露（|VOL beta|，触发线 0.40 / 关注线 0.30）</div>
+  <div class="gauge" id="gauge">
+    <div class="gauge-fill" id="gaugeFill"></div>
+    <div class="gauge-mark" style="left:75%"></div>
+    <div class="gauge-mark" style="left:100%"></div>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="sec-label">alpha 月度趋势（虚线 = 5% 触发线）</div>
+  <svg class="spark" id="spark" viewBox="0 0 300 56" preserveAspectRatio="none"></svg>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function () {
+  var STATUS = {
+    healthy: { cls: 'kimi-status--positive', label: '健康' },
+    watch:   { cls: 'kimi-status--warning',  label: '关注' },
+    trigger: { cls: 'kimi-status--danger',   label: '触发审查' },
+    error:   { cls: 'kimi-status--danger',   label: '运行失败' }
+  };
+  function pct(x, d) { return (x * 100).toFixed(d === undefined ? 1 : d) + '%'; }
+  function render(d) {
+    var s = STATUS[d.status] || STATUS.error;
+    var badge = document.getElementById('badge');
+    badge.className = 'kimi-status ' + s.cls;
+    badge.textContent = d.statusCN || s.label;
+    document.getElementById('meta').textContent = d.asOf ? ('审查日 ' + d.asOf + (d.window ? ' · 窗口 ' + d.window : '')) : '';
+    document.getElementById('headline').textContent = d.headline || '';
+    if (d.status === 'error') { document.getElementById('alpha').textContent = '—'; return; }
+
+    document.getElementById('alpha').textContent = pct(d.alphaAnn, 1);
+    document.getElementById('alphaSub').textContent = '剥离四风格因子后年化 alpha · NW t=' +
+      (d.alphaTNW === undefined ? '—' : d.alphaTNW.toFixed(2)) +
+      (d.r2 !== undefined ? ' · 风格解释 ' + pct(d.r2, 0) : '');
+
+    var volb = d.betas && d.betas.VOL ? Math.abs(d.betas.VOL.beta) : 0;
+    var gmax = 0.5;
+    var gf = document.getElementById('gaugeFill');
+    gf.style.width = Math.min(volb / gmax, 1) * 100 + '%';
+    var gv = document.createElement('div');
+    gv.className = 'gauge-val';
+    gv.style.left = Math.min(volb / gmax, 1) * 100 + '%';
+    gv.textContent = volb.toFixed(2);
+    document.getElementById('gauge').appendChild(gv);
+
+    var chips = document.getElementById('chips');
+    chips.innerHTML = '';
+    ['SMB', 'MOM', 'VOL', 'LIQ'].forEach(function (k) {
+      var b = d.betas && d.betas[k];
+      if (!b) return;
+      var c = document.createElement('span');
+      c.className = 'chip';
+      c.textContent = k + ' ' + (b.beta >= 0 ? '+' : '') + b.beta.toFixed(3) + ' (t=' + b.t.toFixed(1) + ')';
+      chips.appendChild(c);
+    });
+
+    var hist = (d.history || []).filter(function (h) { return typeof h.alpha === 'number'; });
+    var svg = document.getElementById('spark');
+    var W = 300, H = 56, pad = 4;
+    var trig = d.thresholds ? d.thresholds.alpha_trigger : 0.05;
+    var ymax = Math.max(0.10, trig * 1.6);
+    if (hist.length === 0) {
+      svg.innerHTML = '<text x="150" y="30" text-anchor="middle" class="kimi-svg-text-secondary" font-size="11">暂无历史，次月累积</text>';
+    } else {
+      var n = hist.length;
+      var xs = function (i) { return pad + i * (W - 2 * pad) / Math.max(n - 1, 1); };
+      var ys = function (v) { return H - pad - (v / ymax) * (H - 2 * pad); };
+      var html = '';
+      html += '<line x1="' + pad + '" y1="' + ys(trig) + '" x2="' + (W - pad) + '" y2="' + ys(trig) +
+              '" stroke="var(--kimi-color-danger)" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>';
+      var pts = hist.map(function (h, i) { return xs(i).toFixed(1) + ',' + ys(h.alpha).toFixed(1); }).join(' ');
+      html += '<polyline points="' + pts + '" fill="none" stroke="var(--kimi-chart-1)" stroke-width="2"/>';
+      hist.forEach(function (h, i) {
+        html += '<circle cx="' + xs(i).toFixed(1) + '" cy="' + ys(h.alpha).toFixed(1) + '" r="2.5" fill="var(--kimi-chart-1)"/>';
+      });
+      var last = hist[n - 1];
+      html += '<text x="' + (W - pad) + '" y="' + (ys(last.alpha) - 5) + '" text-anchor="end" class="kimi-svg-text-primary" font-size="10">' +
+              pct(last.alpha, 1) + '</text>';
+      if (n >= 2) html += '<text x="' + pad + '" y="' + (H - 6) + '" class="kimi-svg-text-secondary" font-size="9">' +
+              hist[0].date.slice(0, 7) + '</text><text x="' + (W - pad) + '" y="' + (H - 6) +
+              '" text-anchor="end" class="kimi-svg-text-secondary" font-size="9">' + hist[n - 1].date.slice(0, 7) + '</text>';
+      svg.innerHTML = html;
+    }
+    document.getElementById('foot').textContent =
+      '阈值（预注册）：alpha < 5% 或 |VOL beta| > 0.40 触发结构审查 · 月度审查，触发不自动改模型，改动重走三层闸门';
+  }
+  var api = window.DaimonWidget;
+  render((api && api.data && api.data.main) || {});
+  if (api && api.onDataChange) {
+    api.onDataChange(function (change) { if (change.data && change.data.main) render(change.data.main); });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股因子实验室·训练进度</title>
+<style>
+  :root {
+    --kimi-bg: var(--kimi-widget-bg, #ffffff);
+    --kimi-fg: var(--kimi-widget-fg, #1a1a1a);
+    --kimi-muted: var(--kimi-widget-muted, #6b7280);
+    --kimi-border: var(--kimi-widget-border, #e5e7eb);
+    --kimi-positive: var(--kimi-widget-positive, #16a34a);
+    --kimi-danger: var(--kimi-widget-danger, #dc2626);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--kimi-bg); color: var(--kimi-fg);
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    font-size: 13px; line-height: 1.5;
+  }
+  body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
+  .header { display: flex; align-items: baseline; justify-content: space-between; }
+  .title { font-size: 13px; font-weight: 600; color: var(--kimi-muted); letter-spacing: 0.02em; }
+  .score { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; border-radius: 3px; background: var(--kimi-border); overflow: hidden; }
+  .bar > div { height: 100%; background: var(--kimi-positive); border-radius: 3px; transition: width .4s; }
+  .summary { font-size: 12px; color: var(--kimi-muted); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .cell {
+    border: 1px solid var(--kimi-border); border-radius: 7px;
+    padding: 5px 7px; font-size: 11px; text-align: center;
+  }
+  .cell .cn { font-weight: 600; font-size: 11px; }
+  .cell .cv { font-variant-numeric: tabular-nums; font-size: 11px; }
+  .cell.done { border-color: var(--kimi-positive); }
+  .cell.done .cv { color: var(--kimi-positive); }
+  .cell.training .cv { color: var(--kimi-muted); }
+  .cell.todo { opacity: .55; }
+  .cell.todo .cv { color: var(--kimi-muted); }
+  .dsr-row { display: flex; gap: 10px; font-size: 12px; }
+  .dsr-item { display: flex; align-items: center; gap: 5px; }
+  .dsr-item .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dsr-item.pass .v { color: var(--kimi-positive); }
+  .dsr-item.fail .v { color: var(--kimi-danger); }
+  .dsr-item.na .v { color: var(--kimi-muted); }
+  .newmetrics { display: flex; flex-direction: column; gap: 4px; }
+  .nm-item { display: flex; justify-content: space-between; font-size: 12px;
+             border-bottom: 1px dashed var(--kimi-border); padding-bottom: 3px; }
+  .nm-item .ic { font-variant-numeric: tabular-nums; color: var(--kimi-positive); }
+  .footer { margin-top: auto; font-size: 11px; color: var(--kimi-muted); display: flex; justify-content: space-between; }
+  .empty { height: 100%; display: flex; align-items: center; justify-content: center;
+           color: var(--kimi-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    var ORDER = [];
+    for (var f = 0; f < 8; f++) { ORDER.push("alstm_fold" + f); ORDER.push("master_fold" + f); }
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+    function fmt(v, d) {
+      if (typeof v !== "number" || !isFinite(v)) return "—";
+      return v.toFixed(d == null ? 4 : d);
+    }
+    function render(data) {
+      var app = document.getElementById("app");
+      if (!data || typeof data !== "object" || !data.progress) {
+        app.innerHTML = '<div class="empty">等待 walk-forward 训练数据推送…</div>';
+        return;
+      }
+      var prog = data.progress || {};
+      var keys = Object.keys(prog);
+      var done = keys.filter(function (k) { return prog[k] && prog[k].status === "evaluated"; }).length;
+
+      var html = "";
+      html += '<div class="header"><span class="title">walk-forward 训练进度</span>' +
+              '<span class="score">' + done + ' / ' + ORDER.length + "</span></div>";
+      html += '<div class="bar"><div style="width:' + (done / ORDER.length * 100) + '%"></div></div>';
+      if (data.summary) html += '<div class="summary">' + esc(data.summary) + "</div>";
+
+      html += '<div class="grid">';
+      ORDER.forEach(function (k) {
+        var p = prog[k];
+        var cls = p ? (p.status === "evaluated" ? "done" : "training") : "todo";
+        var label = k.replace("_fold", "·fold");
+        var val = p && p.status === "evaluated" ? "R " + fmt(p.rankic) :
+                  (p && p.epochs_done ? p.epochs_done + "ep" : "·");
+        html += '<div class="cell ' + cls + '"><div class="cn">' + esc(label) +
+                '</div><div class="cv">' + esc(val) + "</div></div>";
+      });
+      html += "</div>";
+
+      var dsr = data.dsr || {};
+      var dsrKeys = ["alstm", "master"];
+      html += '<div class="dsr-row"><span style="color:var(--kimi-muted)">DSR:</span>';
+      dsrKeys.forEach(function (m) {
+        var v = dsr[m];
+        if (typeof v !== "number") {
+          html += '<span class="dsr-item na"><span>' + m + '</span><span class="v">—</span></span>';
+        } else {
+          html += '<span class="dsr-item ' + (v >= 0.95 ? "pass" : "fail") + '"><span>' + m +
+                  '</span><span class="v">' + v.toFixed(3) + "</span></span>";
+        }
+      });
+      html += "</div>";
+
+      var nm = (data.newMetrics || []).slice(0, 4);
+      if (nm.length) {
+        html += '<div class="newmetrics">';
+        nm.forEach(function (m) {
+          if (!m || m.model == null) return;
+          html += '<div class="nm-item"><span>' + esc(m.model) + "·fold" + esc(m.fold) +
+                  "（" + esc((m.test || ["", ""])[0]).slice(0, 4) + "测试）</span>" +
+                  '<span class="ic">IC ' + fmt(m.ic) + " / R " + fmt(m.rankic) + "</span></div>";
+        });
+        html += "</div>";
+      }
+
+      var ranAt = data.ranAt ? String(data.ranAt) : "—";
+      html += '<div class="footer"><span>每 epoch 存检查点 · 断点续训</span><span>最近运行 ' +
+              esc(ranAt) + "</span></div>";
+      app.innerHTML = html;
+    }
+    function currentData() {
+      if (window.DaimonWidget && window.DaimonWidget.data && window.DaimonWidget.data.main) {
+        return window.DaimonWidget.data.main;
+      }
+      return null;
+    }
+    render(currentData());
+    if (window.DaimonWidget && typeof window.DaimonWidget.onDataChange === "function") {
+      window.DaimonWidget.onDataChange(function (payload) {
+        render(payload && payload.main ? payload.main : currentData());
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+ "title": "每日收盘总流水线",
+ "description": "每个交易日 17:47 一键贯穿全部日频阶段：行情巡检与数据灌库 → ALSTM 选股信号 → 模拟账户结算（T+1 开盘价成交、跳空超限放弃）→ 实盘表现台账 → 胜率校准 → 分钟竞价行情自录，产出一个汇总工件推送「每日总览」主卡。单阶段失败不阻断后续，异常在汇总中显性列出。替代原先 5 个独立定时任务（已全部停用，周重训保持独立）。纯 Python，不消耗对话额度。",
+ "trigger": {
+  "kind": "schedule",
+  "cron": "47 17 * * 1-5",
+  "timezone": "Asia/Shanghai"
+ },
+ "input": {
+  "kind": "none"
+ },
+ "execution": {
+  "kind": "code",
+  "runtime": "python",
+  "entryRef": {
+   "kind": "path",
+   "base": "automation",
+   "path": "automation.py"
+  },
+  "timeoutMs": 2400000
+ },
+ "result": {
+  "kind": "artifact",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "summary": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "summary"
+   ],
+   "additionalProperties": true
+  }
+ }
+}

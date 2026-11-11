@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日选股信号</title>
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  button, input, select, textarea { font: inherit; }
+  svg text { font-family: var(--kimi-font-sans); }
+  .wrap {
+    width: 100%;
+    padding-block-start: var(--kimi-space-4);
+    padding-inline: var(--kimi-space-4);
+    padding-block-end: var(--kimi-space-4);
+    color: var(--kimi-color-text-primary);
+  }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: var(--kimi-space-2); }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: var(--kimi-space-1); }
+  .badge {
+    font-size: 12px; padding: 2px var(--kimi-space-2);
+    border-radius: var(--kimi-radius-chip);
+    color: var(--kimi-color-text-secondary);
+    background: var(--kimi-color-surface-muted);
+    white-space: nowrap;
+  }
+  .badge.stale { color: var(--kimi-color-warning); background: color-mix(in srgb, var(--kimi-color-warning) 12%, transparent); }
+  table { width: 100%; border-collapse: collapse; margin-block-start: var(--kimi-space-3); }
+  td { padding: 6px 0; border-block-end: 0.5px solid var(--kimi-color-border); font-size: 14px; }
+  tr:last-child td { border-block-end: none; }
+  .rk { width: 28px; color: var(--kimi-color-text-tertiary); font-size: 12px; }
+  .nm { font-weight: 500; }
+  .cd { color: var(--kimi-color-text-tertiary); font-size: 12px; margin-inline-start: var(--kimi-space-1); }
+  .sc {
+    text-align: end; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
+    color: var(--kimi-color-text-secondary); width: 64px;
+  }
+  .bar { height: 3px; border-radius: var(--kimi-radius-full); background: var(--kimi-color-surface-muted); margin-block-start: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--kimi-chart-1); border-radius: var(--kimi-radius-full); }
+  .note { font-size: 12px; color: var(--kimi-color-text-quaternary); margin-block-start: var(--kimi-space-2); }
+  .empty { font-size: 14px; color: var(--kimi-color-text-tertiary); padding-block: var(--kimi-space-6); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="title">每日选股信号</div>
+      <div class="meta" id="meta">等待数据</div>
+    </div>
+    <span class="badge" id="badge">—</span>
+  </div>
+  <div id="body"><div class="empty">任务启用后，每个交易日收盘后自动生成 top10 信号</div></div>
+  <div class="note" id="note"></div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function render(data) {
+    if (!data) return;
+    if (!data.picks || !data.picks.length) {
+      $('meta').textContent = data.signalDate ? ('信号日期 ' + data.signalDate) : '等待数据';
+      $('badge').textContent = '无信号';
+      $('body').innerHTML = '<div class="empty">' + esc(data.note || '今日无新信号') + '</div>';
+      $('note').textContent = '';
+      return;
+    }
+    const d = data.picks;
+    const max = Math.max(...d.map(p => Math.abs(p.score)), 1e-9);
+    $('meta').textContent = '信号日期 ' + data.signalDate + (data.fold >= 0 ? ' · ALSTM fold' + data.fold : '');
+    const b = $('badge');
+    b.textContent = data.stale ? '数据滞后' : '最新';
+    b.className = 'badge' + (data.stale ? ' stale' : '');
+    $('body').innerHTML = '<table>' + d.map(p =>
+      '<tr><td class="rk">' + p.rank + '</td>' +
+      '<td><div class="nm">' + esc(p.name || p.code) + '<span class="cd">' + esc(p.code) + '</span></div>' +
+      '<div class="bar"><i style="width:' + Math.round(Math.abs(p.score) / max * 100) + '%"></i></div></td>' +
+      '<td class="sc">' + p.score.toFixed(4) + '</td></tr>'
+    ).join('') + '</table>';
+    $('note').textContent = data.note || '';
+  }
+  const w = window.DaimonWidget;
+  if (w) {
+    const pick = (m) => (m && m.signal ? ((m.signal.ok && m.signal.artifact) ||
+      {summary: "信号阶段失败：" + ((m.signal || {}).error || "?"), stale: true, picks: [], signalDate: "—", note: ""}) : m);
+    render(pick(w.data && w.data.main));
+    const off = w.onDataChange((snap) => render(pick(snap && snap.main)));
+    if (typeof off === 'function') window.addEventListener('unload', off);
+  }
+</script>
+</body>
+</html>

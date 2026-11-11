@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模拟账户</title>
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  button, input, select, textarea { font: inherit; }
+  svg text { font-family: var(--kimi-font-sans); }
+  .wrap { padding-block-start: var(--kimi-space-4); padding-inline: var(--kimi-space-4); padding-block-end: var(--kimi-space-4); }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--kimi-space-3); }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--kimi-space-3); margin-block-start: var(--kimi-space-3); }
+  .card { border: 1px solid var(--kimi-color-border); border-radius: var(--kimi-radius-panel); padding: var(--kimi-space-3); }
+  .card h3 { margin: 0; font-size: 12px; font-weight: 400; color: var(--kimi-color-text-secondary); }
+  .val { font-size: 24px; font-weight: 500; line-height: 1.15; margin-block-start: var(--kimi-space-1); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .sub { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: var(--kimi-space-1); }
+  .pos { color: var(--kimi-chart-1); }
+  .neg { color: var(--kimi-chart-2); }
+  .zero { color: var(--kimi-color-text-quaternary); }
+  .chart { border: 1px solid var(--kimi-color-border); border-radius: var(--kimi-radius-panel); margin-block-start: var(--kimi-space-3); padding: var(--kimi-space-3); }
+  .chart h3 { margin: 0 0 var(--kimi-space-2); font-size: 12px; font-weight: 400; color: var(--kimi-color-text-secondary); display: flex; justify-content: space-between; }
+  .legend { display: inline-flex; gap: var(--kimi-space-3); font-size: 11px; }
+  .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-inline-end: 4px; vertical-align: middle; }
+  .empty { border: 1px dashed var(--kimi-color-border); border-radius: var(--kimi-radius-panel); padding: var(--kimi-space-6) var(--kimi-space-4); text-align: center; margin-block-start: var(--kimi-space-3); }
+  .empty p { margin: 0; font-size: 14px; color: var(--kimi-color-text-secondary); }
+  .empty .hint { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: var(--kimi-space-1); }
+  .foot { display: flex; flex-wrap: wrap; gap: var(--kimi-space-3); margin-block-start: var(--kimi-space-3); font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .foot b { font-weight: 500; color: var(--kimi-color-text-secondary); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap" id="root">
+  <div class="head">
+    <span class="title">模拟账户 · 可执行口径</span>
+    <span class="meta" id="ranAt">—</span>
+  </div>
+  <div class="empty" id="empty">
+    <p>账户尚无净值记录</p>
+    <p class="hint">每日 18:41 按 top10 信号调仓：T+1 收盘价成交，含佣金/印花税/滑点/整手/涨跌停约束</p>
+  </div>
+  <div id="body" hidden>
+    <div class="cards" id="cards"></div>
+    <div class="chart" id="chartWrap" hidden>
+      <h3><span>净值曲线 vs 沪深300（本金 100 万）</span>
+        <span class="legend">
+          <span><i style="background:var(--kimi-chart-1)"></i>模拟账户</span>
+          <span><i style="background:var(--kimi-color-text-quaternary)"></i>基准</span>
+        </span></h3>
+      <svg id="chart" width="100%" height="140" viewBox="0 0 600 140" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="foot" id="foot"></div>
+  </div>
+</div>
+<script>
+(function () {
+  function fmtPct(x) { return (x == null || !isFinite(x)) ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(2) + "%"; }
+  function fmtMoney(x) { return (x == null || !isFinite(x)) ? "—" : x.toLocaleString("zh-CN", { maximumFractionDigits: 0 }); }
+  function cls(x) { return x == null ? "zero" : (x > 0 ? "pos" : (x < 0 ? "neg" : "zero")); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function drawChart(curve) {
+    var svg = document.getElementById("chart");
+    var pts = (curve || []).filter(function (p) { return p && p.nav != null; });
+    var wrap = document.getElementById("chartWrap");
+    if (pts.length < 2) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    var W = 600, H = 140, P = 6;
+    var vals = [];
+    pts.forEach(function (p) { vals.push(p.nav); if (p.bench_nav != null) vals.push(p.bench_nav); });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
+    var pad = (hi - lo) * 0.08; hi += pad; lo -= pad;
+    function X(i) { return P + i * (W - 2 * P) / Math.max(pts.length - 1, 1); }
+    function Y(v) { return H - P - (v - lo) * (H - 2 * P) / (hi - lo); }
+    function path(key) {
+      var d = "";
+      var started = false;
+      for (var i = 0; i < pts.length; i++) {
+        var v = pts[i][key];
+        if (v == null) continue;
+        d += (started ? " L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1);
+        started = true;
+      }
+      return d;
+    }
+    var base = 1000000;
+    svg.innerHTML =
+      '<path d="' + path("nav") + '" fill="none" stroke="var(--kimi-chart-1)" stroke-width="1.8"/>' +
+      '<path d="' + path("bench_nav") + '" fill="none" stroke="var(--kimi-color-text-quaternary)" stroke-width="1.2" stroke-dasharray="4 3"/>' +
+      '<line x1="' + P + '" y1="' + Y(base) + '" x2="' + (W - P) + '" y2="' + Y(base) + '" stroke="var(--kimi-color-border)" stroke-width="0.8"/>' +
+      '<text x="' + (W - P) + '" y="' + (Y(base) - 3) + '" text-anchor="end" font-size="9" fill="var(--kimi-color-text-tertiary)">100万</text>';
+  }
+
+  function render(data) {
+    if (!data) return;
+    document.getElementById("ranAt").textContent = "更新于 " + (data.ranAt || "—").slice(5, 16).replace("T", " ");
+    var has = data.nav != null;
+    document.getElementById("empty").hidden = has;
+    document.getElementById("body").hidden = !has;
+    if (!has) return;
+    document.getElementById("cards").innerHTML =
+      '<div class="card"><h3>账户净值</h3><div class="val">' + fmtMoney(data.nav) + '</div>' +
+        '<div class="sub">本金 1,000,000 · ' + esc(data.paramsVer || "") + '</div></div>' +
+      '<div class="card"><h3>总收益 / 超额</h3><div class="val ' + cls(data.totalRet) + '">' + fmtPct(data.totalRet) + '</div>' +
+        '<div class="sub">vs 沪深300 ' + fmtPct(data.excessRet) + '</div></div>' +
+      '<div class="card"><h3>最大回撤</h3><div class="val ' + cls(data.maxDD) + '">' + fmtPct(data.maxDD) + '</div>' +
+        '<div class="sub">费用累计 ¥' + fmtMoney(data.feeCum) + '</div></div>';
+    drawChart(data.curve);
+    document.getElementById("foot").innerHTML =
+      '<span>持仓 <b>' + (data.nPos ?? 0) + '</b> 只</span>' +
+      '<span>现金 <b>¥' + fmtMoney(data.cash) + '</b></span>' +
+      '<span>受阻订单 <b>' + (data.blockedOrders ?? 0) + '</b> 笔</span>' +
+      '<span>数据至 <b>' + esc((data.asOf || "—").slice(0, 10)) + '</b></span>';
+  }
+
+  var api = window.DaimonWidget;
+  if (api && api.onDataChange) {
+    const pick = function (m) { return (m && m.sim) ? ((m.sim.ok && m.sim.artifact) || {summary: "模拟阶段失败：" + ((m.sim || {}).error || "?"), curve: []}) : m; };
+    render(pick(api.data && api.data.main));
+    api.onDataChange(function (d) { render(pick(d && d.main)); });
+  }
+})();
+</script>
+</body>
+</html>

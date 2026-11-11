@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实盘表现台账</title>
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  button, input, select, textarea { font: inherit; }
+  svg text { font-family: var(--kimi-font-sans); }
+  .wrap { padding-block-start: var(--kimi-space-4); padding-inline: var(--kimi-space-4); padding-block-end: var(--kimi-space-4); }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--kimi-space-3); }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--kimi-space-3); margin-block-start: var(--kimi-space-3); }
+  .card { border: 1px solid var(--kimi-color-border); border-radius: var(--kimi-radius-panel); padding: var(--kimi-space-3); }
+  .card h3 { margin: 0; font-size: 12px; font-weight: 400; color: var(--kimi-color-text-secondary); }
+  .val { font-size: 28px; font-weight: 500; line-height: 1.15; margin-block-start: var(--kimi-space-1); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .sub { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: var(--kimi-space-1); }
+  .pos { color: var(--kimi-chart-1); }
+  .neg { color: var(--kimi-chart-2); }
+  .zero { color: var(--kimi-color-text-quaternary); }
+  .empty { border: 1px dashed var(--kimi-color-border); border-radius: var(--kimi-radius-panel); padding: var(--kimi-space-6) var(--kimi-space-4); text-align: center; margin-block-start: var(--kimi-space-3); }
+  .empty p { margin: 0; font-size: 14px; color: var(--kimi-color-text-secondary); }
+  .empty .hint { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: var(--kimi-space-1); }
+  .foot { display: flex; gap: var(--kimi-space-3); margin-block-start: var(--kimi-space-3); font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .foot b { font-weight: 500; color: var(--kimi-color-text-secondary); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap" id="root">
+  <div class="head">
+    <span class="title">实盘表现台账</span>
+    <span class="meta" id="ranAt">—</span>
+  </div>
+  <div class="empty" id="empty">
+    <p>首批持仓尚未到结算窗口</p>
+    <p class="hint">信号 T 日发出，T+1 收盘入场；1 / 5 / 21 日 horizon 的 realized 超额将在行情到位后自动结转</p>
+  </div>
+  <div class="cards" id="cards" hidden></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function () {
+  var HORIZON_LABEL = { 1: "1 日", 5: "5 日", 21: "21 日" };
+  function fmtPct(x) { return (x == null || !isFinite(x)) ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(2) + "%"; }
+  function cls(x) { return x == null ? "zero" : (x > 0 ? "pos" : (x < 0 ? "neg" : "zero")); }
+  function render(data) {
+    if (!data) return;
+    document.getElementById("ranAt").textContent = "更新于 " + (data.ranAt || "—").slice(5, 16).replace("T", " ");
+    var stats = (data.stats || []).filter(function (s) { return s && s.n > 0; });
+    var cards = document.getElementById("cards");
+    var empty = document.getElementById("empty");
+    if (stats.length) {
+      empty.hidden = true; cards.hidden = false;
+      cards.innerHTML = stats.map(function (s) {
+        return '<div class="card"><h3>' + (HORIZON_LABEL[s.horizon] || s.horizon + " 日") +
+          ' horizon · n=' + s.n + '</h3>' +
+          '<div class="val ' + cls(s.cumExcess) + '">' + fmtPct(s.cumExcess) + '</div>' +
+          '<div class="sub">均值超额 ' + fmtPct(s.meanExcess) + '</div></div>';
+      }).join("");
+    } else {
+      empty.hidden = false; cards.hidden = true;
+    }
+    document.getElementById("foot").innerHTML =
+      '<span>信号 <b>' + (data.signals ?? 0) + '</b> 条</span>' +
+      '<span>已结算 <b>' + (data.settled ?? 0) + '</b> 笔</span>' +
+      '<span>待结 <b>' + (data.pending ?? 0) + '</b> 笔</span>';
+  }
+  var api = window.DaimonWidget;
+  if (api && api.onDataChange) {
+    const pick = function (m) { return (m && m.ledger) ? ((m.ledger.ok && m.ledger.artifact) || {summary: "台账阶段失败：" + ((m.ledger || {}).error || "?"), stats: []}) : m; };
+    render(pick(api.data && api.data.main));
+    api.onDataChange(function (d) { render(pick(d && d.main)); });
+  }
+})();
+</script>
+</body>
+</html>

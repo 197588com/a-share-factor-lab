@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>因子衰竭诊断矩阵</title>
+<style>
+  :root { font-family: var(--kimi-font-sans); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  svg text { font-family: var(--kimi-font-sans); }
+  .wrap {
+    width: 100%;
+    padding-block-start: var(--kimi-space-4);
+    padding-inline: var(--kimi-space-4);
+    padding-block-end: var(--kimi-space-4);
+    color: var(--kimi-color-text-primary);
+  }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--kimi-space-2); flex-wrap: wrap; }
+  .title { font-size: 17px; font-weight: 500; }
+  .meta { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-block-start: var(--kimi-space-1); }
+  .legend { display: flex; align-items: center; gap: var(--kimi-space-2); font-size: 12px; color: var(--kimi-color-text-tertiary); }
+  .legend .grad {
+    width: 120px; height: 8px; border-radius: var(--kimi-radius-full);
+    background: linear-gradient(to right,
+      var(--kimi-chart-2), color-mix(in srgb, var(--kimi-chart-2) 15%, transparent) 38%,
+      var(--kimi-color-surface-muted) 50%,
+      color-mix(in srgb, var(--kimi-chart-1) 15%, transparent) 62%, var(--kimi-chart-1));
+  }
+  .hm { margin-block-start: var(--kimi-space-3); overflow-x: auto; }
+  table { border-collapse: collapse; }
+  .hm th, .hm td { padding: 4px 3px; text-align: center; }
+  .hm th { font-size: 11px; font-weight: 400; color: var(--kimi-color-text-tertiary); }
+  .hm th.fam, .hm td.fam { text-align: start; padding-inline-end: var(--kimi-space-2); }
+  .hm td.fam { font-size: 13px; font-weight: 500; color: var(--kimi-color-text-primary); white-space: nowrap; cursor: pointer; border-radius: var(--kimi-radius-small); }
+  .hm td.fam:hover { background: var(--kimi-color-surface-muted); }
+  .hm td.fam.sel { background: var(--kimi-color-surface-muted); }
+  .hm td.fam .n { font-weight: 400; color: var(--kimi-color-text-quaternary); font-size: 11px; margin-inline-start: 4px; }
+  .cell { width: 44px; height: 22px; border-radius: 3px; font-size: 10px;
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
+    color: var(--kimi-color-text-secondary); cursor: default; }
+  .cell.now { outline: 1.5px solid var(--kimi-color-text-primary); }
+  .dt { margin-block-start: var(--kimi-space-3); border-block-start: 0.5px solid var(--kimi-color-border); padding-block-start: var(--kimi-space-3); }
+  .dt h3 { font-size: 14px; font-weight: 500; margin-block-end: var(--kimi-space-2); }
+  .dt h3 span { font-weight: 400; color: var(--kimi-color-text-tertiary); font-size: 12px; margin-inline-start: var(--kimi-space-2); }
+  .rows { display: grid; grid-template-columns: 92px 1fr 64px 64px; gap: 2px var(--kimi-space-2); align-items: center; }
+  .rows .hd { font-size: 11px; color: var(--kimi-color-text-quaternary); padding-block-end: 2px; }
+  .rows .hd.r { text-align: end; }
+  .rows .fn { font-size: 12px; color: var(--kimi-color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rows .track { height: 10px; position: relative; background: var(--kimi-color-surface-muted); border-radius: var(--kimi-radius-full); }
+  .rows .track i { position: absolute; top: 0; bottom: 0; border-radius: var(--kimi-radius-full); }
+  .rows .track i.a { background: color-mix(in srgb, var(--kimi-chart-1) 45%, transparent); }
+  .rows .track i.b { background: var(--kimi-chart-1); }
+  .rows .v { font-size: 11px; text-align: end; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; color: var(--kimi-color-text-tertiary); }
+  .note { font-size: 12px; color: var(--kimi-color-text-quaternary); margin-block-start: var(--kimi-space-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="title">因子衰竭诊断矩阵</div>
+      <div class="meta">Alpha158 · 14 因子族 × 12 年（2015–2026）逐日 RankIC 均值 · 未中性化</div>
+    </div>
+    <div class="legend"><span>负</span><div class="grad"></div><span>正</span></div>
+  </div>
+  <div class="hm" id="hm"></div>
+  <div class="dt" id="dt"></div>
+  <div class="note">读法：蓝 = 正向选股力，红 = 负向（反向可用）。2026 列黑框为当前年。corr 族是唯一 12 年稳定存活的因子族（负向）。单因子原始 IC 未中性化，与模型内贡献不等价。</div>
+</div>
+<script>
+const DATA = {"years": ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"], "families": [{"name": "cnt", "ic": [-0.0093, -0.0037, -0.0006, 0.0014, -0.0026, -0.001, -0.0061, -0.0086, -0.0012, 0.0006, -0.0028, -0.002]}, {"name": "corr", "ic": [-0.0223, -0.0289, -0.0266, -0.0196, -0.0197, -0.0178, -0.0034, -0.0153, -0.0045, -0.015, -0.0145, -0.0205]}, {"name": "imbal", "ic": [-0.0119, -0.0079, -0.0011, -0.0016, -0.0074, -0.001, -0.0051, -0.0028, -0.0001, 0.0003, -0.005, -0.0021]}, {"name": "kbar", "ic": [-0.0299, -0.0239, -0.0231, -0.0049, -0.0029, -0.0085, -0.0165, -0.0135, -0.0161, -0.0052, -0.0007, -0.002]}, {"name": "ma", "ic": [0.0626, 0.0515, 0.0173, 0.0143, 0.0199, 0.0135, 0.0154, 0.0137, -0.0033, -0.0044, 0.0209, -0.0086]}, {"name": "price", "ic": [0.0399, 0.0258, 0.0309, 0.0009, -0.0009, 0.0084, 0.0157, 0.0028, 0.0036, -0.0037, -0.0086, -0.0128]}, {"name": "range", "ic": [0.0514, 0.0396, 0.016, 0.0085, 0.0155, 0.0074, 0.0142, 0.01, -0.003, -0.0067, 0.0155, -0.0074]}, {"name": "rank", "ic": [-0.0601, -0.0416, -0.0208, -0.0039, -0.018, -0.012, -0.0146, -0.0154, 0.0014, 0.0056, -0.0145, 0.0013]}, {"name": "risk", "ic": [-0.0279, -0.0228, -0.0105, -0.0042, -0.0094, -0.0083, -0.0063, -0.0063, -0.0007, 0.0004, -0.0101, 0.0059]}, {"name": "roc", "ic": [0.0617, 0.0484, 0.0115, 0.0133, 0.0188, 0.0071, 0.0129, 0.0126, -0.004, -0.003, 0.0173, -0.0035]}, {"name": "rsv", "ic": [-0.0517, -0.0341, -0.0128, 0.0011, -0.0115, -0.0009, -0.0157, -0.0069, 0.0047, 0.0075, -0.0115, 0.0066]}, {"name": "std", "ic": [-0.0038, -0.021, -0.0032, 0.0023, -0.0092, 0.0001, -0.0146, -0.0241, -0.0549, -0.05, -0.0131, -0.0345]}, {"name": "sum", "ic": [-0.0184, -0.0116, -0.0029, -0.0006, -0.0051, -0.0017, -0.004, -0.0042, 0.0023, 0.0012, -0.0041, -0.0004]}, {"name": "vol", "ic": [-0.0031, -0.0012, -0.0011, 0.0004, 0.0001, -0.0021, 0.0002, 0.0014, -0.0003, -0.004, -0.0009, -0.0014]}, {"name": "margin", "ic": [-0.0023, -0.0168, -0.0046, -0.0164, -0.0111, -0.0064, -0.0042, -0.0148, -0.0108, -0.0189, -0.0094, -0.0055]}, {"name": "dragon", "ic": [-0.0258, -0.0285, -0.0109, -0.0217, -0.0143, -0.0123, -0.01, -0.0026, -0.0212, -0.0007, 0.0067, -0.0143]}, {"name": "mf", "ic": [-0.0051, -0.0061, 0.0013, -0.0002, -0.0001, 0.0062, -0.0011, -0.0033, 0.0006, 0.0061, 0.0006, 0.0023]}, {"name": "corrx", "ic": [-0.0196, -0.0195, -0.0218, -0.0204, -0.0165, -0.0091, -0.0052, -0.0168, -0.0138, -0.0204, -0.0092, -0.0085]}, {"name": "min", "ic": [-0.0184, -0.0132, -0.0073, -0.0065, -0.0042, -0.0041, 0.001, -0.007, -0.007, -0.0083, -0.0105, -0.0146]}], "detail": {"kbar": [{"f": "KMID", "a": -0.042, "b": 0.0066}, {"f": "KLEN", "a": -0.034, "b": -0.0407}, {"f": "KMID2", "a": -0.0305, "b": 0.0141}, {"f": "KUP", "a": -0.0119, "b": -0.0262}, {"f": "KUP2", "a": -0.0015, "b": -0.0055}, {"f": "KLOW", "a": -0.0416, "b": -0.0099}, {"f": "KLOW2", "a": -0.0205, "b": 0.0117}, {"f": "KSFT", "a": -0.0501, "b": 0.0144}, {"f": "KSFT2", "a": -0.0368, "b": 0.0176}], "price": [{"f": "OPEN0", "a": 0.042, "b": -0.0066}, {"f": "HIGH0", "a": 0.0172, "b": -0.0347}, {"f": "LOW0", "a": 0.0605, "b": 0.003}], "roc": [{"f": "ROC5", "a": 0.0518, "b": -0.0005}, {"f": "ROC10", "a": 0.048, "b": -0.0113}, {"f": "ROC20", "a": 0.0573, "b": 0.0016}, {"f": "ROC30", "a": 0.085, "b": -0.0025}, {"f": "ROC60", "a": 0.0667, "b": -0.0047}], "ma": [{"f": "MA5", "a": 0.0517, "b": -0.0156}, {"f": "MA10", "a": 0.0504, "b": -0.0124}, {"f": "MA20", "a": 0.0589, "b": -0.0075}, {"f": "MA30", "a": 0.0686, "b": -0.0047}, {"f": "MA60", "a": 0.0834, "b": -0.0025}], "std": [{"f": "STD5", "a": -0.0087, "b": -0.0385}, {"f": "STD10", "a": -0.0071, "b": -0.037}, {"f": "STD20", "a": -0.0011, "b": -0.0325}, {"f": "STD30", "a": -0.0004, "b": -0.0317}, {"f": "STD60", "a": -0.0018, "b": -0.0331}], "risk": [{"f": "BETA5", "a": -0.0488, "b": 0.01}, {"f": "BETA10", "a": -0.0365, "b": 0.0062}, {"f": "BETA20", "a": -0.0427, "b": 0.0013}, {"f": "BETA30", "a": -0.0517, "b": -0.0009}, {"f": "BETA60", "a": -0.0516, "b": 0.0012}, {"f": "RSQR5", "a": -0.0244, "b": -0.012}, {"f": "RSQR10", "a": -0.0142, "b": 0.0009}, {"f": "RSQR20", "a": 0.002, "b": 0.0095}, {"f": "RSQR30", "a": -0.0013, "b": 0.0087}, {"f": "RSQR60", "a": -0.0298, "b": 0.0098}, {"f": "RESI5", "a": -0.0074, "b": 0.0163}, {"f": "RESI10", "a": -0.0256, "b": 0.0074}, {"f": "RESI20", "a": -0.025, "b": 0.009}, {"f": "RESI30", "a": -0.0221, "b": 0.0138}, {"f": "RESI60", "a": -0.0395, "b": 0.0067}], "range": [{"f": "MAX5", "a": 0.0327, "b": -0.0412}, {"f": "MAX10", "a": 0.0319, "b": -0.0278}, {"f": "MAX20", "a": 0.0363, "b": -0.0243}, {"f": "MAX30", "a": 0.0456, "b": -0.0293}, {"f": "MAX60", "a": 0.0467, "b": -0.0317}, {"f": "MIN5", "a": 0.0579, "b": 0.0122}, {"f": "MIN10", "a": 0.0514, "b": 0.0092}, {"f": "MIN20", "a": 0.0458, "b": 0.0153}, {"f": "MIN30", "a": 0.0525, "b": 0.0181}, {"f": "MIN60", "a": 0.0591, "b": 0.021}, {"f": "QTLU5", "a": 0.0489, "b": -0.0235}, {"f": "QTLU10", "a": 0.0488, "b": -0.0149}, {"f": "QTLU20", "a": 0.0615, "b": -0.0118}, {"f": "QTLU30", "a": 0.065, "b": -0.0107}, {"f": "QTLU60", "a": 0.0734, "b": -0.0107}, {"f": "QTLD5", "a": 0.0473, "b": -0.0032}, {"f": "QTLD10", "a": 0.0475, "b": -0.0042}, {"f": "QTLD20", "a": 0.0467, "b": -0.0019}, {"f": "QTLD30", "a": 0.0568, "b": 0.0041}, {"f": "QTLD60", "a": 0.0725, "b": 0.0078}], "rank": [{"f": "RANK5", "a": -0.0563, "b": 0.0084}, {"f": "RANK10", "a": -0.0588, "b": 0.0051}, {"f": "RANK20", "a": -0.0564, "b": 0.0014}, {"f": "RANK30", "a": -0.0612, "b": -0.0034}, {"f": "RANK60", "a": -0.0676, "b": -0.0048}], "rsv": [{"f": "RSV5", "a": -0.0539, "b": 0.0138}, {"f": "RSV10", "a": -0.0447, "b": 0.0114}, {"f": "RSV20", "a": -0.0447, "b": 0.0029}, {"f": "RSV30", "a": -0.0535, "b": 0.0026}, {"f": "RSV60", "a": -0.0615, "b": 0.0023}], "imbal": [{"f": "IMAX5", "a": -0.0432, "b": -0.0041}, {"f": "IMAX10", "a": -0.0249, "b": 0.0004}, {"f": "IMAX20", "a": -0.0208, "b": -0.0132}, {"f": "IMAX30", "a": -0.0257, "b": -0.0039}, {"f": "IMAX60", "a": -0.0183, "b": 0.0025}, {"f": "IMIN5", "a": 0.0307, "b": -0.0009}, {"f": "IMIN10", "a": 0.0208, "b": -0.0081}, {"f": "IMIN20", "a": 0.011, "b": 0.0018}, {"f": "IMIN30", "a": 0.0351, "b": 0.0006}, {"f": "IMIN60", "a": 0.0189, "b": 0.0072}, {"f": "IMXD5", "a": -0.0454, "b": -0.0014}, {"f": "IMXD10", "a": -0.0321, "b": 0.0024}, {"f": "IMXD20", "a": -0.023, "b": -0.0082}, {"f": "IMXD30", "a": -0.0383, "b": -0.0032}, {"f": "IMXD60", "a": -0.0231, "b": -0.0036}], "corr": [{"f": "CORR5", "a": -0.0294, "b": -0.0142}, {"f": "CORR10", "a": -0.0253, "b": -0.0244}, {"f": "CORR20", "a": -0.0147, "b": -0.0156}, {"f": "CORR30", "a": 0.0002, "b": -0.0131}, {"f": "CORR60", "a": -0.0055, "b": -0.0188}, {"f": "CORD5", "a": -0.0372, "b": -0.0207}, {"f": "CORD10", "a": -0.0283, "b": -0.0208}, {"f": "CORD20", "a": -0.0247, "b": -0.0261}, {"f": "CORD30", "a": -0.0304, "b": -0.0234}, {"f": "CORD60", "a": -0.0281, "b": -0.0284}], "cnt": [{"f": "CNTP5", "a": -0.0393, "b": -0.0077}, {"f": "CNTP10", "a": -0.0286, "b": 0.0075}, {"f": "CNTP20", "a": -0.0255, "b": -0.0068}, {"f": "CNTP30", "a": -0.0317, "b": -0.0041}, {"f": "CNTP60", "a": -0.0124, "b": -0.0031}, {"f": "CNTN5", "a": 0.0404, "b": 0.0055}, {"f": "CNTN10", "a": 0.033, "b": -0.0106}, {"f": "CNTN20", "a": 0.0312, "b": 0.0005}, {"f": "CNTN30", "a": 0.0392, "b": -0.0053}, {"f": "CNTN60", "a": 0.0185, "b": -0.0098}, {"f": "CNTD5", "a": -0.0424, "b": -0.0066}, {"f": "CNTD10", "a": -0.033, "b": 0.0092}, {"f": "CNTD20", "a": -0.0315, "b": -0.0036}, {"f": "CNTD30", "a": -0.0388, "b": 0.0007}, {"f": "CNTD60", "a": -0.0182, "b": 0.0035}], "sum": [{"f": "SUMP5", "a": -0.0527, "b": -0.0034}, {"f": "SUMP10", "a": -0.0449, "b": 0.0056}, {"f": "SUMP20", "a": -0.0512, "b": -0.0075}, {"f": "SUMP30", "a": -0.0713, "b": -0.0023}, {"f": "SUMP60", "a": -0.0552, "b": 0.0013}, {"f": "SUMN5", "a": 0.0528, "b": 0.0034}, {"f": "SUMN10", "a": 0.0449, "b": -0.0056}, {"f": "SUMN20", "a": 0.0512, "b": 0.0075}, {"f": "SUMN30", "a": 0.0713, "b": 0.0023}, {"f": "SUMN60", "a": 0.0552, "b": -0.0013}, {"f": "SUMD5", "a": -0.0527, "b": -0.0034}, {"f": "SUMD10", "a": -0.0449, "b": 0.0056}, {"f": "SUMD20", "a": -0.0512, "b": -0.0075}, {"f": "SUMD30", "a": -0.0713, "b": -0.0023}, {"f": "SUMD60", "a": -0.0552, "b": 0.0013}], "vol": [{"f": "VMA5", "a": 0.0166, "b": 0.0031}, {"f": "VMA10", "a": 0.0187, "b": 0.0081}, {"f": "VMA20", "a": 0.0189, "b": 0.0082}, {"f": "VMA30", "a": 0.0188, "b": 0.0097}, {"f": "VMA60", "a": 0.0313, "b": 0.0076}, {"f": "VSTD5", "a": -0.0062, "b": -0.0116}, {"f": "VSTD10", "a": -0.0052, "b": -0.0113}, {"f": "VSTD20", "a": -0.0, "b": -0.0029}, {"f": "VSTD30", "a": 0.0041, "b": 0.0038}, {"f": "VSTD60", "a": 0.0169, "b": 0.0017}, {"f": "WVMA5", "a": -0.0049, "b": -0.0034}, {"f": "WVMA10", "a": -0.019, "b": -0.0074}, {"f": "WVMA20", "a": -0.0263, "b": -0.0108}, {"f": "WVMA30", "a": -0.0291, "b": -0.012}, {"f": "WVMA60", "a": -0.0261, "b": -0.0039}, {"f": "VSUMP5", "a": -0.0177, "b": -0.0038}, {"f": "VSUMP10", "a": -0.0106, "b": -0.0043}, {"f": "VSUMP20", "a": -0.02, "b": -0.001}, {"f": "VSUMP30", "a": -0.0287, "b": -0.0106}, {"f": "VSUMP60", "a": -0.0233, "b": -0.0003}, {"f": "VSUMN5", "a": 0.0177, "b": 0.0038}, {"f": "VSUMN10", "a": 0.0106, "b": 0.0043}, {"f": "VSUMN20", "a": 0.02, "b": 0.001}, {"f": "VSUMN30", "a": 0.0287, "b": 0.0106}, {"f": "VSUMN60", "a": 0.0233, "b": 0.0003}, {"f": "VSUMD5", "a": -0.0177, "b": -0.0038}, {"f": "VSUMD10", "a": -0.0106, "b": -0.0043}, {"f": "VSUMD20", "a": -0.02, "b": -0.001}, {"f": "VSUMD30", "a": -0.0287, "b": -0.0106}, {"f": "VSUMD60", "a": -0.0233, "b": -0.0003}], "margin": [{"f": "MBR", "a": 0.0233, "b": -0.014}, {"f": "MBAL", "a": -0.0025, "b": -0.0084}, {"f": "MSRT", "a": -0.0276, "b": 0.0057}]}};
+const VMAX = 0.065;
+function color(v) {
+  const t = Math.max(-1, Math.min(1, v / VMAX));
+  const pos = 'var(--kimi-chart-1)', neg = 'var(--kimi-chart-2)';
+  if (Math.abs(t) < 0.04) return 'var(--kimi-color-surface-muted)';
+  const c = t > 0 ? pos : neg;
+  return 'color-mix(in srgb, ' + c + ' ' + Math.round(Math.abs(t) * 88) + '%, var(--kimi-color-surface-muted))';
+}
+function textColor(v) {
+  const t = Math.abs(v) / VMAX;
+  return t > 0.45 ? 'var(--kimi-color-on-accent, #fff)' : 'var(--kimi-color-text-secondary)';
+}
+const hm = document.getElementById('hm');
+let html = '<table><tr><th class="fam">因子族</th>';
+DATA.years.forEach(y => html += '<th>' + y.slice(2) + '</th>');
+html += '</tr>';
+DATA.families.forEach((f, i) => {
+  html += '<tr><td class="fam" data-i="' + i + '" id="fam-' + i + '">' + f.name +
+    '<span class="n">' + (DATA.detail[f.name] || []).length + '</span></td>';
+  f.ic.forEach((v, j) => {
+    html += '<td class="cell' + (j === DATA.years.length - 1 ? ' now' : '') + '" style="background:' +
+      color(v) + ';color:' + textColor(v) + '" title="' + f.name + ' ' + DATA.years[j] + ' RankIC ' +
+      v.toFixed(4) + '">' + (Math.abs(v) >= 0.0099 ? v.toFixed(2) : '') + '</td>';
+  });
+  html += '</tr>';
+});
+hm.innerHTML = html + '</table>';
+
+const dt = document.getElementById('dt');
+let sel = -1;
+function showDetail(i) {
+  const f = DATA.families[i];
+  const rows = (DATA.detail[f.name] || []).slice().sort((a, b) => Math.abs(b.b) - Math.abs(a.a));
+  const m = Math.max(0.01, ...rows.flatMap(r => [Math.abs(r.a || 0), Math.abs(r.b)]));
+  let h = '<h3>' + f.name + ' 族<span>族内单因子 2015（浅） vs 2026（深）· 按 |IC| 排序</span></h3><div class="rows">';
+  h += '<div class="hd">因子</div><div class="hd">IC 条带</div><div class="hd r">2015</div><div class="hd r">2026</div>';
+  rows.forEach(r => {
+    const wa = Math.round(Math.abs(r.a || 0) / m * 100), wb = Math.round(Math.abs(r.b || 0) / m * 100);
+    h += '<div class="fn">' + r.f + '</div><div class="track">' +
+      '<i class="a" style="width:' + wa + '%"></i><i class="b" style="width:' + wb + '%;opacity:.85"></i></div>' +
+      '<div class="v">' + (r.a === null ? '—' : r.a.toFixed(3)) + '</div><div class="v">' + r.b.toFixed(3) + '</div>';
+  });
+  dt.innerHTML = h + '</div>';
+  document.querySelectorAll('.hm td.fam').forEach(td => td.classList.remove('sel'));
+  document.getElementById('fam-' + i).classList.add('sel');
+  sel = i;
+}
+hm.addEventListener('click', e => {
+  const td = e.target.closest('td.fam');
+  if (td) showDetail(+td.dataset.i);
+});
+showDetail(DATA.families.findIndex(f => f.name === 'ma'));
+</script>
+</body>
+</html>

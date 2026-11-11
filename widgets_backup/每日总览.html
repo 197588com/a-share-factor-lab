@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日总览</title>
+<style>
+  :root {
+    --bg: #0f1420; --card: #171e2e; --line: #26314a;
+    --txt: #e8ecf4; --dim: #8a94ab; --up: #f04d4d; --down: #2fbf71;
+    --accent: #5b8cff; --warn: #f5a623;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--txt);
+         font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         padding: 14px 16px; font-size: 13px; line-height: 1.55; }
+  .head { display: flex; justify-content: space-between; align-items: baseline;
+          margin-bottom: 10px; }
+  .head h1 { font-size: 15px; font-weight: 600; letter-spacing: .5px; }
+  .head .time { color: var(--dim); font-size: 11px; }
+  .verdict { background: var(--card); border: 1px solid var(--line);
+             border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .verdict .line { font-size: 14px; font-weight: 600; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 8px;
+           border-radius: 10px; margin-left: 8px; vertical-align: 2px; }
+  .badge.ok  { background: rgba(47,191,113,.15); color: var(--down); }
+  .badge.bad { background: rgba(245,166,35,.15); color: var(--warn); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cell { background: var(--card); border: 1px solid var(--line);
+          border-radius: 8px; padding: 8px 10px; }
+  .cell .k { color: var(--dim); font-size: 11px; margin-bottom: 2px; }
+  .cell .v { font-size: 14px; font-weight: 600; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .picks { margin-top: 8px; background: var(--card); border: 1px solid var(--line);
+           border-radius: 8px; padding: 8px 10px; }
+  .picks .k { color: var(--dim); font-size: 11px; margin-bottom: 4px; }
+  .picks .row { display: flex; gap: 8px; padding: 2px 0; font-size: 13px; }
+  .picks .rank { color: var(--accent); width: 18px; }
+  .alerts { margin-top: 8px; }
+  .alerts .item { color: var(--warn); font-size: 12px; padding: 3px 0 3px 14px;
+                  position: relative; }
+  .alerts .item::before { content: "▲"; position: absolute; left: 0;
+                          font-size: 9px; top: 5px; }
+  .empty { color: var(--dim); text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+<div id="app"><div class="empty">等待今日总流水线运行…</div></div>
+<script>
+(function () {
+  var w = window.DaimonWidget || {};
+  var app = document.getElementById("app");
+
+  function fmtPct(x, digits) {
+    if (x === null || x === undefined || isNaN(x)) return "—";
+    return (x * 100).toFixed(digits === undefined ? 2 : digits) + "%";
+  }
+  function fmtNum(x) { return x === null || x === undefined ? "—" : Number(x).toLocaleString(); }
+
+  function render(d) {
+    if (!d) { app.innerHTML = '<div class="empty">等待今日总流水线运行…</div>'; return; }
+    var pat = (d.patrol && d.patrol.artifact) || {};
+    var sig = (d.signal && d.signal.artifact) || {};
+    var sim = (d.sim && d.sim.artifact) || {};
+    var wr  = (d.winrate && d.winrate.artifact) || {};
+    var fin = d.final || {};
+    var h1  = ((wr.live || {}).h1) || {};
+
+    var excess = sim.excessRet;
+    var exCls = excess > 0 ? "up" : (excess < 0 ? "down" : "");
+    var exSign = excess > 0 ? "+" : "";
+    var healthy = fin.healthy !== false;
+    var anomalies = fin.anomalies || [];
+    var picks = sig.picks || [];
+    var regimeProb = pat.regimeProb !== undefined ? pat.regimeProb.toFixed(2) : "—";
+
+    var stages = d.stages || {};
+    var stageNames = { patrol: "巡检", signal: "信号", sim: "模拟", ledger: "台账", winrate: "胜率", hf: "分钟" };
+    var stageLine = Object.keys(stageNames).map(function (k) {
+      var s = stages[k];
+      if (!s) return stageNames[k] + ":·";
+      return stageNames[k] + (s.ok ? "✓" : "✗") + s.sec + "s";
+    }).join(" ");
+
+    var html = '';
+    html += '<div class="head"><h1>每日总览</h1><span class="time">' + (d.ranAt || "").slice(5, 16) + '</span></div>';
+    html += '<div class="verdict"><div class="line">' + (fin.headline || d.summary || "—") +
+            '<span class="badge ' + (healthy ? "ok" : "bad") + '">' +
+            (healthy ? "全链路健康" : "异常 " + anomalies.length + " 项") + '</span></div></div>';
+    html += '<div class="grid">';
+    html += cell("市场状态", (pat.regime || "?") + " · p=" + regimeProb);
+    html += cell("信号日期", (sig.signalDate || "—") + (sig.stale ? "（迟滞）" : ""));
+    html += cell("模拟净值", fmtNum(sim.nav) +
+                 (excess !== undefined && excess !== null ? ' <span class="' + exCls + '">(' + exSign + fmtPct(excess) + ')</span>' : ""));
+    html += cell("h=1 胜率", h1.winRate !== undefined ? fmtPct(h1.winRate, 1) + " · " + (h1.days || 0) + "天" : "样本未到期");
+    html += cell("数据质量", pat.qualityPass === false ? "未通过" : "通过 · 至 " + (pat.dataAsOf || "—"));
+    html += cell("费用累计", "¥" + fmtNum(sim.feeCum));
+    html += '</div>';
+    if (picks.length) {
+      html += '<div class="picks"><div class="k">今日信号 Top ' + Math.min(picks.length, 5) + '</div>';
+      picks.slice(0, 5).forEach(function (p) {
+        html += '<div class="row"><span class="rank">' + p.rank + '</span><span>' +
+                (p.name || p.code) + '</span><span style="color:var(--dim)">' +
+                p.code + ' · ' + Number(p.score).toFixed(4) + '</span></div>';
+      });
+      html += '</div>';
+    }
+    if (anomalies.length) {
+      html += '<div class="alerts">';
+      anomalies.forEach(function (a) { html += '<div class="item">' + a + '</div>'; });
+      html += '</div>';
+    }
+    html += '<div style="margin-top:8px;color:var(--dim);font-size:10px">' + stageLine + '</div>';
+    app.innerHTML = html;
+  }
+
+  function cell(k, v) {
+    return '<div class="cell"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
+  }
+
+  render(w.data && w.data.main);
+  if (typeof w.onDataChange === "function") {
+    w.onDataChange(function (snap) { render(snap && snap.main); });
+  }
+})();
+</script>
+</body>
+</html>

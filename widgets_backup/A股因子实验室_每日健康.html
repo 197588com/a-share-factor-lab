@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股因子实验室·每日健康</title>
+<style>
+  :root {
+    --kimi-bg: var(--kimi-widget-bg, #ffffff);
+    --kimi-fg: var(--kimi-widget-fg, #1a1a1a);
+    --kimi-muted: var(--kimi-widget-muted, #6b7280);
+    --kimi-border: var(--kimi-widget-border, #e5e7eb);
+    --kimi-positive: var(--kimi-widget-positive, #16a34a);
+    --kimi-danger: var(--kimi-widget-danger, #dc2626);
+    --kimi-neutral: var(--kimi-widget-neutral, #6b7280);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--kimi-bg);
+    color: var(--kimi-fg);
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    font-size: 13px; line-height: 1.5;
+  }
+  body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .header { display: flex; align-items: center; justify-content: space-between; }
+  .title { font-size: 13px; font-weight: 600; color: var(--kimi-muted); letter-spacing: 0.02em; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+    border: 1px solid var(--kimi-border);
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .badge.neutral { color: var(--kimi-neutral); }
+  .badge.neutral .dot { background: var(--kimi-neutral); }
+  .badge.positive { color: var(--kimi-positive); border-color: var(--kimi-positive); }
+  .badge.positive .dot { background: var(--kimi-positive); }
+  .badge.danger { color: var(--kimi-danger); border-color: var(--kimi-danger); }
+  .badge.danger .dot { background: var(--kimi-danger); }
+  .meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--kimi-muted); }
+  .quality { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+  .quality.pass { color: var(--kimi-positive); }
+  .quality.fail { color: var(--kimi-danger); }
+  .summary { font-size: 12px; color: var(--kimi-muted); }
+  .section-label { font-size: 11px; font-weight: 600; color: var(--kimi-muted); letter-spacing: 0.05em; }
+  .alerts { display: flex; flex-direction: column; gap: 6px; }
+  .alert-item {
+    border: 1px solid var(--kimi-danger);
+    border-radius: 8px; padding: 7px 10px;
+    font-size: 12px; color: var(--kimi-fg);
+  }
+  .alert-item .alert-head { display: flex; justify-content: space-between; font-weight: 600; color: var(--kimi-danger); }
+  .alert-item .alert-detail { color: var(--kimi-muted); margin-top: 2px; }
+  .ok-box {
+    border: 1px solid var(--kimi-border); border-radius: 8px;
+    padding: 7px 10px; font-size: 12px; color: var(--kimi-muted);
+  }
+  .directions { display: flex; flex-direction: column; gap: 5px; }
+  .dir-item {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--kimi-border); border-radius: 8px;
+    padding: 6px 10px; font-size: 12px;
+  }
+  .dir-item .rank { color: var(--kimi-muted); font-weight: 600; width: 14px; }
+  .dir-item .fname { flex: 1; font-weight: 600; }
+  .dir-item .ic { font-variant-numeric: tabular-nums; }
+  .ic.pos { color: var(--kimi-positive); }
+  .ic.neg { color: var(--kimi-danger); }
+  .footer { margin-top: auto; font-size: 11px; color: var(--kimi-muted); display: flex; justify-content: space-between; }
+  .empty {
+    height: 100%; display: flex; align-items: center; justify-content: center;
+    color: var(--kimi-muted); font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    var FACTOR_NAMES = {
+      intraday20: "日内反转 20日",
+      mom_20d: "20日动量",
+      dist_high20: "距20日高点",
+      vol_60d: "60日波动率"
+    };
+    var REGIMES = {
+      bull:   { label: "多头", cls: "positive" },
+      bear:   { label: "空头", cls: "danger" },
+      shock:  { label: "冲击", cls: "danger" },
+      quiet:  { label: "震荡", cls: "neutral" }
+    };
+    function factorName(id) { return FACTOR_NAMES[id] || id; }
+    function regimeInfo(r) { return REGIMES[r] || { label: r || "未知", cls: "neutral" }; }
+    function fmtIc(v) {
+      if (typeof v !== "number") return "—";
+      return (v > 0 ? "+" : "") + v.toFixed(4);
+    }
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+    function render(data) {
+      var app = document.getElementById("app");
+      if (!data || typeof data !== "object" || !data.regime) {
+        app.innerHTML = '<div class="empty">等待每日收盘巡检数据推送…</div>';
+        return;
+      }
+      var rg = regimeInfo(data.regime);
+      var prob = typeof data.regimeProb === "number"
+        ? (data.regimeProb * 100).toFixed(0) + "%" : "—";
+      var alerts = Array.isArray(data.alerts) ? data.alerts : [];
+      var dirs = Array.isArray(data.topDirections) ? data.topDirections : [];
+
+      var html = '';
+      html += '<div class="header"><span class="title">A股因子实验室 · 每日健康</span>' +
+              '<span class="badge ' + rg.cls + '"><span class="dot"></span>' +
+              esc(rg.label) + " · " + esc(prob) + "</span></div>";
+      html += '<div class="meta"><span>数据截至 ' + esc(data.dataAsOf || "—") + "</span>" +
+              '<span class="quality ' + (data.qualityPass ? "pass" : "fail") + "">' +
+              (data.qualityPass ? "质量门禁 PASS" : "质量门禁 FAIL") + "</span></div>";
+      if (data.summary) html += '<div class="summary">' + esc(data.summary) + "</div>";
+
+      html += '<div><div class="section-label">红线告警</div>';
+      if (alerts.length === 0) {
+        html += '<div class="ok-box" style="margin-top:5px">无告警，全部因子通过红线检查。</div>';
+      } else {
+        html += '<div class="alerts" style="margin-top:5px">';
+        alerts.forEach(function (a) {
+          html += '<div class="alert-item"><div class="alert-head"><span>' +
+                  esc(factorName(a.factor)) + "</span><span>" + esc(a.redLine || "") +
+                  '</span></div><div class="alert-detail">' + esc(a.detail || "") + "</div></div>";
+        });
+        html += "</div>";
+      }
+      html += "</div>";
+
+      html += '<div><div class="section-label">当前状态下盈利方向 · 前 3 因子</div>';
+      if (dirs.length === 0) {
+        html += '<div class="ok-box" style="margin-top:5px">暂无该状态的因子统计。</div>';
+      } else {
+        html += '<div class="directions" style="margin-top:5px">';
+        dirs.forEach(function (d, i) {
+          var ic = typeof d.rankIc === "number" ? d.rankIc : 0;
+          html += '<div class="dir-item"><span class="rank">' + (i + 1) + '</span>' +
+                  '<span class="fname">' + esc(factorName(d.factor)) + '</span>' +
+                  '<span class="ic ' + (ic >= 0 ? "pos" : "neg") + '">RankIC ' +
+                  fmtIc(d.rankIc) + "</span></div>";
+        });
+        html += "</div>";
+      }
+      html += "</div>";
+
+      var ranAt = data.ranAt ? String(data.ranAt).replace("T", " ").slice(0, 16) : "—";
+      html += '<div class="footer"><span>每交易日 17:07 自动巡检</span><span>最近运行 ' +
+              esc(ranAt) + "</span></div>";
+      app.innerHTML = html;
+    }
+    function currentData() {
+      var m = (window.DaimonWidget && window.DaimonWidget.data) ? window.DaimonWidget.data.main : null;
+      return (m && m.patrol) ? ((m.patrol.ok && m.patrol.artifact) || {summary: "巡检阶段失败：" + ((m.patrol || {}).error || "?")}) : m;
+    }
+    render(currentData());
+    if (window.DaimonWidget && typeof window.DaimonWidget.onDataChange === "function") {
+      window.DaimonWidget.onDataChange(function (payload) {
+        render(payload && payload.main ? payload.main : currentData());
+      });
+    }
+  </script>
+</body>
+</html>
