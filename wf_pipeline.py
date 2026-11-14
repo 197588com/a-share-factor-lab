@@ -318,7 +318,25 @@ def mlflow_log(cfg, model_name, fold, cache, train_res=None, eval_res=None):
 
 # ---------------- DSR 审计（1.4c 上线闸门） ----------------
 def audit(cfg, model_name, trials=None, threshold=0.95):
+    """DSR 审计。
+
+    口径纪律（P21/P24，2026-11-14 起）：**唯一可信输入=日度超额收益序列 +
+    候选账本 trials 数**（data/backtest/dsr_recomputed.json，P21 重算留档）。
+    旧实现用 IC 序列 + folds×models 当 trials，产出 0.9999 错值，已废弃——
+    仅当封存值缺失时才回退旧算法，且输出带 deprecated_legacy=true 标记。
+    """
     sys.path.insert(0, os.path.join(WS, "qs-skills", "skill-backtest-overfit", "scripts"))
+    canon_path = os.path.join(WS, "data", "backtest", "dsr_recomputed.json")
+    if os.path.exists(canon_path):
+        c = json.load(open(canon_path))
+        return {"model": model_name, "canonical": True,
+                "n_obs": c["n_obs"], "n_trials": c["n_trials"],
+                "observed_sr_ann": c["observed_sr_ann"],
+                "psr_vs_zero": c["psr_vs_zero"],
+                "deflated_sharpe_ratio": c["deflated_sharpe_ratio"],
+                "passed": bool(c["deflated_sharpe_ratio"] >= threshold),
+                "threshold": threshold,
+                "note": "P21 正确口径（日度超额收益+账本 trials）；旧 IC 口径已废弃"}
     from deflated_sharpe import deflated_sharpe_ratio
     icdir = os.path.join(WS, "data", "wf_ic")
     if not os.path.isdir(icdir):
@@ -332,6 +350,9 @@ def audit(cfg, model_name, trials=None, threshold=0.95):
     n_trials = trials or (len(files) * len(cfg["models"]))
     res = deflated_sharpe_ratio(series["ic"].to_numpy(dtype=float), n_trials=n_trials)
     out = {"model": model_name, "folds": len(files), "n_trials": n_trials,
+           "deprecated_legacy": True,
+           "warning": "IC 序列输入口径已废弃（P21），0.9999 类数值不可信；"
+                      "请改用 data/backtest/dsr_recomputed.json 正确口径",
            "observed_ic_mean": float(series["ic"].mean()),
            "observed_ic_ir": float(series["ic"].mean() / (series["ic"].std() + 1e-12)),
            **res.to_dict(), "threshold": threshold, "passed": bool(res.deflated_sharpe_ratio >= threshold)}

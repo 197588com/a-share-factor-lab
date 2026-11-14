@@ -22,8 +22,37 @@ REVIEW_DIR = os.path.join(WS, "data", "live")
 
 MIN_DAYS = 60                    # 预注册：不足 60 个交易日不出 DSR 结论
 PASS_GATE = 0.95                 # P4 上线四闸门之一：DSR ≥ 0.95
+SUNSET_DATE = "2027-03-31"       # P24 预注册：降级触发器终审日
+SUNSET_RANKIC_MAX = 0.005        # "无回升"= 最近 12 个 fold 样本外 RankIC 均值 ≤ 此线
 STATUS_CN = {"insufficient": "样本积累中", "passed": "过闸", "failed": "未过闸",
              "error": "运行失败"}
+
+
+def sunset_gate(today, art):
+    """降级触发器进度评估（只报进度，终审日才判决；判定标准预注册于 P24）。"""
+    rankics = []
+    smry = os.path.join(WS, "data", "wf_state.json")
+    if os.path.exists(smry):
+        s = json.load(open(smry))
+        rankics = [v.get("rankic") for k, v in s.get("folds", {}).items()
+                   if k.startswith("alstm_") and v.get("rankic") is not None]
+    mean_ic = float(np.mean(rankics)) if rankics else None
+    days_left = (datetime.date.fromisoformat(SUNSET_DATE)
+                 - datetime.date.fromisoformat(today)).days
+    prog = []
+    prog.append(f"距终审 {days_left} 天")
+    prog.append(f"sim DSR 样本 {art.get('nDays', 0)}/{MIN_DAYS}"
+                + (f"，DSR={art['dsr']:.4f}" if "dsr" in art else "（未出数）"))
+    prog.append(f"样本外 RankIC（{len(rankics)} fold 均值）="
+                + (f"{mean_ic:+.4f}" if mean_ic is not None else "无数据")
+                + f"，回升线 >{SUNSET_RANKIC_MAX}")
+    verdict = None
+    if days_left <= 0:
+        fail_dsr = not ("dsr" in art and art["dsr"] >= PASS_GATE)
+        fail_ic = mean_ic is None or mean_ic <= SUNSET_RANKIC_MAX
+        verdict = ("DEMOTE" if (fail_dsr and fail_ic) else "KEEP")
+    return {"sunsetDate": SUNSET_DATE, "daysLeft": days_left,
+            "meanOosRankIC": mean_ic, "verdict": verdict, "progress": "；".join(prog)}
 
 
 def load_excess():
@@ -116,6 +145,13 @@ def run_review():
         ]
         if "dsr" in art:
             md.append(f"- DSR={art['dsr']:.4f} PSR={art['psr']:.4f} 年化SR={art.get('srAnn', float('nan')):.3f}")
+        # 降级触发器（P24 预注册，2026-11-14）：2027Q1 末终审
+        sunset = sunset_gate(today, art)
+        art["sunsetGate"] = sunset
+        md += ["", "## 降级触发器（预注册，终审日 2027-03-31）", "",
+               f"- 立约：终审日 sim 口径 DSR 仍 < {PASS_GATE} 且样本外 RankIC 无回升"
+               "（最近 12  fold 均值 ≤ 0.005）→ **降级为研究系统，停用实盘信号**，"
+               "避免在衰竭信号上继续损耗", f"- 当前进度：{sunset['progress']}"]
         md_path = os.path.join(REVIEW_DIR, f"dsr_live_review_{today}.md")
         open(md_path, "w").write("\n".join(md))
         art["review"] = "\n".join(md)
