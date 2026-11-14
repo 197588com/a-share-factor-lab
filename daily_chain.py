@@ -177,6 +177,20 @@ def main():
                         WHERE source='hmm_v2' AND trade_date=(SELECT MAX(trade_date) FROM regime_probs
                         WHERE source='hmm_v2') ORDER BY prob DESC LIMIT 1""").fetchone()
     alerts = con.execute("SELECT COUNT(*) FROM factor_alerts WHERE run_at::DATE = CURRENT_DATE").fetchone()[0]
+    # 红线明细持久化（P23）：每日一行落 jsonl，供 redline_watch 跨周观察（幂等，按日覆盖）
+    try:
+        import json as _json
+        rows = con.execute("""SELECT factor_id, red_line, detail FROM factor_alerts
+                              WHERE run_at::DATE = CURRENT_DATE""").fetchall()
+        jl = os.path.join(WS, "data", "live", "patrol_alerts.jsonl")
+        recs = [_json.loads(l) for l in open(jl)] if os.path.exists(jl) else []
+        today = dt.date.today().isoformat()
+        recs = [r for r in recs if r.get("date") != today]
+        recs.append({"date": today,
+                     "alerts": [{"factor": f, "redLine": r, "detail": d} for f, r, d in rows]})
+        _json.dump(recs[-400:], open(jl, "w"), ensure_ascii=False, indent=0)
+    except Exception as e:
+        log(f"红线明细落盘失败（非致命）: {e}")
     con.close()
     log(f"摘要: 当前regime={st[0] if st else '?'}(p={st[1]:.2f}) 今日红线告警={alerts}条"
         f"{' <-- 需要关注' if alerts else ''}")

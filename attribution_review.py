@@ -18,6 +18,8 @@ REVIEW_DIR = os.path.join(WS, "data", "live")
 THRESH = {"alpha_trigger": 0.05, "alpha_watch": 0.075,
           "volbeta_trigger": 0.40, "volbeta_watch": 0.30}
 STATUS_CN = {"healthy": "健康", "watch": "关注", "trigger": "触发审查", "error": "运行失败"}
+# 提前触发标记（redline_watch.py 经环境变量传入；月度例行为空）
+EARLY = os.environ.get("EARLY_TRIGGER", "")
 
 
 def run_review():
@@ -57,6 +59,8 @@ def run_review():
     os.makedirs(os.path.dirname(HIST), exist_ok=True)
     rec = {"date": today, "alpha": round(alpha, 6), "vol_beta": round(volb, 6),
            "r2": round(a["r2"], 4), "status": status}
+    if EARLY:
+        rec["trigger"] = EARLY
     prev = []
     if os.path.exists(HIST):
         prev = [json.loads(l) for l in open(HIST) if l.strip()]
@@ -68,8 +72,8 @@ def run_review():
 
     # 4. 审查报告（md 工件，供人工翻阅）
     md = [
-        f"# 超额归因月度审查 · {today}",
-        "",
+        f"# 超额归因{'【提前触发】' if EARLY else '月度'}审查 · {today}", "",
+        f"- 触发方式：{'红线持续观察（' + EARLY + '）' if EARLY else '月度例行'}",
         f"- 窗口：{a['window']}（封存线内，n={a['n_days']} 日）",
         f"- 原始超额年化：{a['excess_ann_raw']:.2%}",
         f"- **四因子剥离后 alpha：{alpha:.2%}/年（NW t={a['alpha_t_nw']:.2f}）**",
@@ -89,6 +93,7 @@ def run_review():
     art = {
         "asOf": today, "window": a["window"], "nDays": a["n_days"],
         "status": status, "statusCN": STATUS_CN[status],
+        "trigger": EARLY or "monthly",
         "headline": f"{STATUS_CN[status]}：{'；'.join(reasons)}",
         "alphaAnn": round(alpha, 6), "alphaTNW": round(a["alpha_t_nw"], 3),
         "r2": round(a["r2"], 4), "excessAnnRaw": round(a["excess_ann_raw"], 6),
