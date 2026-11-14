@@ -29,6 +29,58 @@ PASS_LINE = 0.5223         # top50 样本外及格线
 COIN = 0.5
 
 
+def factor_watch(con):
+    """因子级降级观察项（P23 补充，2026-11-14 预注册）。
+
+    纪律：只观察、不参与胜率 status 判定（多一份信息，少一份误判来源）。
+    口径与 factor_lab/monitor.py 红线一致（只读复算，不触发 monitor 的写库副作用）：
+      R1  60日滚动|RankIC| < 全期|RankIC|/3 且持续 ≥20 日 → 衰减
+      R2  regime 切换后10日内累计 RankIC 转负 → 状态不适配
+    """
+    states = dict(con.execute(
+        "SELECT factor_id, state FROM factor_registry").fetchall())
+    watch_ids = [f for f, s in states.items() if s in ("validated", "promoted")]
+    if not watch_ids:
+        return {"watching": [], "note": "当前无 validated/promoted 因子"}
+    ph = ",".join(f"'{f}'" for f in watch_ids)
+    ic = con.execute(f"""SELECT factor_id, trade_date, rank_ic FROM ic_daily
+                         WHERE factor_id IN ({ph}) ORDER BY 1,2""").df()
+    reg = con.execute("""SELECT trade_date, regime FROM regime_labels
+                         WHERE source='hmm_v2'""").df()
+    full_abs = ic.groupby("factor_id")["rank_ic"].mean().abs()
+    ROLL_WIN, IC_FRAC, STREAK, SEG_N = 60, 1 / 3, 20, 10
+    out = []
+    for fid, g in ic.groupby("factor_id"):
+        fm = float(full_abs[fid])
+        roll = g.set_index("trade_date")["rank_ic"].rolling(ROLL_WIN).mean().dropna()
+        streak, roll_ic = 0, float("nan")
+        if not roll.empty:
+            below = (roll.abs() < fm * IC_FRAC).astype(int)
+            streak = int(below.iloc[::-1].eq(1).cumprod().sum())
+            roll_ic = float(roll.iloc[-1])
+        m = g.merge(reg, on="trade_date", how="inner").sort_values("trade_date").reset_index(drop=True)
+        seg_regime, seg_ic, seg_len = None, float("nan"), 0
+        if len(m) >= 12:
+            changed = m["regime"].ne(m["regime"].shift())
+            idx = changed[changed].index
+            if len(idx) >= 2:
+                switch = idx[-1]
+                seg = m.iloc[switch:switch + SEG_N]
+                seg_regime, seg_ic, seg_len = m["regime"].iloc[switch], float(seg["rank_ic"].sum()), len(seg)
+        flags = []
+        if streak >= STREAK:
+            flags.append(f"R1 衰减 {streak} 日（60日滚动 {roll_ic:+.3f} vs 全期 {fm:+.3f} 的 1/3 线 {fm / 3:.3f}）")
+        if seg_len >= 5 and seg_ic < 0:
+            flags.append(f"R2 regime[{seg_regime}]切换后{seg_len}日累计IC转负（{seg_ic:+.3f}）")
+        out.append({"factor": fid, "state": states[fid],
+                    "fullIc": round(float(g["rank_ic"].mean()), 4),
+                    "roll60Ic": (round(roll_ic, 4) if roll_ic == roll_ic else None),
+                    "flags": flags,
+                    "degraded": bool(flags)})
+    return {"watching": out,
+            "note": "口径=R1/R2 红线只读复算；degraded=True 仅提示观察，不参与胜率判定"}
+
+
 def main():
     con = duckdb.connect(DB, read_only=True)
     df = con.execute("""SELECT l.signal_date, l.horizon, l.excess, s.rank
@@ -95,6 +147,11 @@ def main():
         "oosTop50Win": hist.get("oosTop50Win"),
         "byRank": rk,
     }
+    # 因子级降级观察项（只观察，不参与判定）
+    try:
+        review["factorWatch"] = factor_watch(con)
+    except Exception as e:
+        review["factorWatch"] = {"error": str(e)}
 
     lines = [f"# 胜率校准报告 · {today}", "",
              f"**状态：{status.upper()}** — {reason}", "",
@@ -104,6 +161,19 @@ def main():
              f" / top50 全期 {hist.get('top50Win', 0):.1%}", ""]
     if rank_tbl:
         lines += ["## 逐名次胜率（实盘）", "", "| 名次 | 胜率 | 均值超额 | n |", "|---|---|---|---|", rank_tbl, ""]
+    fw = review.get("factorWatch") or {}
+    degraded = [w for w in fw.get("watching", []) if w.get("degraded")]
+    if degraded or fw.get("watching"):
+        lines += ["## 因子级降级观察项（只观察，不影响上方判定）", "",
+                  f"- {fw.get('note', '')}", ""]
+        for w in fw.get("watching", []):
+            mark = "⚠️ 降级观察" if w.get("degraded") else "正常"
+            lines.append(f"- **{w['factor']}**（{w['state']}）：{mark}"
+                         f"｜全期 RankIC {w['fullIc']:+.3f}"
+                         + (f"｜60日滚动 {w['roll60Ic']:+.3f}" if w.get("roll60Ic") is not None else ""))
+            for fl in w.get("flags", []):
+                lines.append(f"  - {fl}")
+        lines.append("")
     if status == "trigger":
         lines += ["## 触发审查（候选动作，不自动执行）", "",
                   "1. 核对数据链路：信号/行情/结算是否异常（先排除工程假摔）",
