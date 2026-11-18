@@ -320,23 +320,31 @@ def mlflow_log(cfg, model_name, fold, cache, train_res=None, eval_res=None):
 def audit(cfg, model_name, trials=None, threshold=0.95):
     """DSR 审计。
 
-    口径纪律（P21/P24，2026-11-14 起）：**唯一可信输入=日度超额收益序列 +
-    候选账本 trials 数**（data/backtest/dsr_recomputed.json，P21 重算留档）。
-    旧实现用 IC 序列 + folds×models 当 trials，产出 0.9999 错值，已废弃——
-    仅当封存值缺失时才回退旧算法，且输出带 deprecated_legacy=true 标记。
+    口径纪律（P25，2026-11-18 起）：ALSTM 当前主口径为 P25 原始价可执行日超额
+    （data/backtest/execution_replay/dsr_execution_replay.json）；P21 理想化口径仅在
+    P25 缺失时回退。两者均为日度超额收益 + 固定账本 trials，旧 IC 口径永久废弃。
     """
     sys.path.insert(0, os.path.join(WS, "qs-skills", "skill-backtest-overfit", "scripts"))
-    canon_path = os.path.join(WS, "data", "backtest", "dsr_recomputed.json")
-    if os.path.exists(canon_path):
+    canonical = []
+    if model_name == "alstm":
+        canonical = [
+            (os.path.join(WS, "data", "backtest", "execution_replay", "dsr_execution_replay.json"),
+             "P25 raw-price executable daily excess; formal window through 2026-06-30"),
+            (os.path.join(WS, "data", "backtest", "dsr_recomputed.json"),
+             "P21 idealized daily excess fallback; superseded when P25 exists"),
+        ]
+    for canon_path, scope in canonical:
+        if not os.path.exists(canon_path):
+            continue
         c = json.load(open(canon_path))
-        return {"model": model_name, "canonical": True,
+        return {"model": model_name, "canonical": True, "source": canon_path, "scope": scope,
                 "n_obs": c["n_obs"], "n_trials": c["n_trials"],
                 "observed_sr_ann": c["observed_sr_ann"],
                 "psr_vs_zero": c["psr_vs_zero"],
                 "deflated_sharpe_ratio": c["deflated_sharpe_ratio"],
                 "passed": bool(c["deflated_sharpe_ratio"] >= threshold),
                 "threshold": threshold,
-                "note": "P21 正确口径（日度超额收益+账本 trials）；旧 IC 口径已废弃"}
+                "note": "日度超额收益+账本 trials；旧 IC 口径已废弃"}
     from deflated_sharpe import deflated_sharpe_ratio
     icdir = os.path.join(WS, "data", "wf_ic")
     if not os.path.isdir(icdir):

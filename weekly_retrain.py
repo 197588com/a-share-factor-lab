@@ -126,7 +126,7 @@ def run(dry=False):
     if not dry:
         save_state(st)
         dsr = {}
-        for model in ("alstm", "master"):
+        for model in ("alstm",):
             r = wf.audit(cfg, model)
             if r:
                 dsr[model] = r["deflated_sharpe_ratio"]
