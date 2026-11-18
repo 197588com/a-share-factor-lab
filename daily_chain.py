@@ -183,7 +183,7 @@ def main():
         rows = con.execute("""SELECT factor_id, red_line, detail FROM factor_alerts
                               WHERE run_at::DATE = CURRENT_DATE""").fetchall()
         jl = os.path.join(WS, "data", "live", "patrol_alerts.jsonl")
-        recs = [_json.loads(l) for l in open(jl)] if os.path.exists(jl) else []
+        recs = _json.load(open(jl)) if os.path.exists(jl) else []
         today = dt.date.today().isoformat()
         recs = [r for r in recs if r.get("date") != today]
         recs.append({"date": today,

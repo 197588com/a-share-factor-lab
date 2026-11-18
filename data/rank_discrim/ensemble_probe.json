@@ -1,0 +1,399 @@
+{
+ "scope": "DEE-inspired two-model mechanism probe; not full DEE reproduction",
+ "folds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7
+ ],
+ "weights": {
+  "alstm": 0.5,
+  "master": 0.5
+ },
+ "pooled": {
+  "days": 1891,
+  "alstm": {
+   "rankIC": 0.021354,
+   "rankICIR": 3.1644
+  },
+  "master": {
+   "rankIC": 0.020246,
+   "rankICIR": 2.2011
+  },
+  "dee2": {
+   "rankIC": 0.026092,
+   "rankICIR": 3.1769
+  },
+  "dee2_minus_alstm": {
+   "mean": 0.004738,
+   "relative": 0.2219,
+   "naivePairedT": 2.349,
+   "positiveDayShare": 0.5299
+  },
+  "scoreRankCorr": 0.2062
+ },
+ "byFold": {
+  "0": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.034503,
+    "rankICIR": 5.2737
+   },
+   "master": {
+    "rankIC": 0.04565,
+    "rankICIR": 4.2003
+   },
+   "dee2": {
+    "rankIC": 0.05104,
+    "rankICIR": 5.6454
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.016537,
+    "relative": 0.4793,
+    "naivePairedT": 2.335,
+    "positiveDayShare": 0.5738
+   },
+   "scoreRankCorr": 0.1726
+  },
+  "1": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.032162,
+    "rankICIR": 3.8083
+   },
+   "master": {
+    "rankIC": 0.016333,
+    "rankICIR": 1.7051
+   },
+   "dee2": {
+    "rankIC": 0.029307,
+    "rankICIR": 3.0772
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.002855,
+    "relative": -0.0888,
+    "naivePairedT": -0.539,
+    "positiveDayShare": 0.4599
+   },
+   "scoreRankCorr": 0.2452
+  },
+  "2": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.017291,
+    "rankICIR": 3.4426
+   },
+   "master": {
+    "rankIC": 0.033477,
+    "rankICIR": 4.0431
+   },
+   "dee2": {
+    "rankIC": 0.033362,
+    "rankICIR": 5.0634
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.016071,
+    "relative": 0.9294,
+    "naivePairedT": 2.844,
+    "positiveDayShare": 0.5907
+   },
+   "scoreRankCorr": 0.1272
+  },
+  "3": {
+   "days": 236,
+   "alstm": {
+    "rankIC": 0.029883,
+    "rankICIR": 4.2768
+   },
+   "master": {
+    "rankIC": 0.027798,
+    "rankICIR": 3.2856
+   },
+   "dee2": {
+    "rankIC": 0.036194,
+    "rankICIR": 4.8094
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.006311,
+    "relative": 0.2112,
+    "naivePairedT": 1.118,
+    "positiveDayShare": 0.5339
+   },
+   "scoreRankCorr": 0.2222
+  },
+  "4": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.016056,
+    "rankICIR": 2.295
+   },
+   "master": {
+    "rankIC": 0.00964,
+    "rankICIR": 1.207
+   },
+   "dee2": {
+    "rankIC": 0.01478,
+    "rankICIR": 1.8903
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.001276,
+    "relative": -0.0795,
+    "naivePairedT": -0.281,
+    "positiveDayShare": 0.4726
+   },
+   "scoreRankCorr": 0.2879
+  },
+  "5": {
+   "days": 236,
+   "alstm": {
+    "rankIC": 0.022137,
+    "rankICIR": 3.53
+   },
+   "master": {
+    "rankIC": 0.02336,
+    "rankICIR": 2.6286
+   },
+   "dee2": {
+    "rankIC": 0.027599,
+    "rankICIR": 3.3606
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.005463,
+    "relative": 0.2468,
+    "naivePairedT": 1.134,
+    "positiveDayShare": 0.5381
+   },
+   "scoreRankCorr": 0.2575
+  },
+  "6": {
+   "days": 236,
+   "alstm": {
+    "rankIC": 0.010041,
+    "rankICIR": 1.7839
+   },
+   "master": {
+    "rankIC": 0.00289,
+    "rankICIR": 0.3016
+   },
+   "dee2": {
+    "rankIC": 0.008752,
+    "rankICIR": 1.1156
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.001289,
+    "relative": -0.1284,
+    "naivePairedT": -0.208,
+    "positiveDayShare": 0.5424
+   },
+   "scoreRankCorr": 0.1354
+  },
+  "7": {
+   "days": 235,
+   "alstm": {
+    "rankIC": 0.008641,
+    "rankICIR": 1.1687
+   },
+   "master": {
+    "rankIC": 0.002639,
+    "rankICIR": 0.2813
+   },
+   "dee2": {
+    "rankIC": 0.007519,
+    "rankICIR": 0.8828
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.001121,
+    "relative": -0.1298,
+    "naivePairedT": -0.189,
+    "positiveDayShare": 0.5277
+   },
+   "scoreRankCorr": 0.2014
+  }
+ },
+ "byYear": {
+  "2015": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.034503,
+    "rankICIR": 5.2737
+   },
+   "master": {
+    "rankIC": 0.04565,
+    "rankICIR": 4.2003
+   },
+   "dee2": {
+    "rankIC": 0.05104,
+    "rankICIR": 5.6454
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.016537,
+    "relative": 0.4793,
+    "naivePairedT": 2.335,
+    "positiveDayShare": 0.5738
+   },
+   "scoreRankCorr": 0.1726
+  },
+  "2016": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.032162,
+    "rankICIR": 3.8083
+   },
+   "master": {
+    "rankIC": 0.016333,
+    "rankICIR": 1.7051
+   },
+   "dee2": {
+    "rankIC": 0.029307,
+    "rankICIR": 3.0772
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.002855,
+    "relative": -0.0888,
+    "naivePairedT": -0.539,
+    "positiveDayShare": 0.4599
+   },
+   "scoreRankCorr": 0.2452
+  },
+  "2017": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.017291,
+    "rankICIR": 3.4426
+   },
+   "master": {
+    "rankIC": 0.033477,
+    "rankICIR": 4.0431
+   },
+   "dee2": {
+    "rankIC": 0.033362,
+    "rankICIR": 5.0634
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.016071,
+    "relative": 0.9294,
+    "naivePairedT": 2.844,
+    "positiveDayShare": 0.5907
+   },
+   "scoreRankCorr": 0.1272
+  },
+  "2018": {
+   "days": 236,
+   "alstm": {
+    "rankIC": 0.029883,
+    "rankICIR": 4.2768
+   },
+   "master": {
+    "rankIC": 0.027798,
+    "rankICIR": 3.2856
+   },
+   "dee2": {
+    "rankIC": 0.036194,
+    "rankICIR": 4.8094
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.006311,
+    "relative": 0.2112,
+    "naivePairedT": 1.118,
+    "positiveDayShare": 0.5339
+   },
+   "scoreRankCorr": 0.2222
+  },
+  "2019": {
+   "days": 237,
+   "alstm": {
+    "rankIC": 0.016056,
+    "rankICIR": 2.295
+   },
+   "master": {
+    "rankIC": 0.00964,
+    "rankICIR": 1.207
+   },
+   "dee2": {
+    "rankIC": 0.01478,
+    "rankICIR": 1.8903
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.001276,
+    "relative": -0.0795,
+    "naivePairedT": -0.281,
+    "positiveDayShare": 0.4726
+   },
+   "scoreRankCorr": 0.2879
+  },
+  "2020": {
+   "days": 236,
+   "alstm": {
+    "rankIC": 0.022137,
+    "rankICIR": 3.53
+   },
+   "master": {
+    "rankIC": 0.02336,
+    "rankICIR": 2.6286
+   },
+   "dee2": {
+    "rankIC": 0.027599,
+    "rankICIR": 3.3606
+   },
+   "dee2_minus_alstm": {
+    "mean": 0.005463,
+    "relative": 0.2468,
+    "naivePairedT": 1.134,
+    "positiveDayShare": 0.5381
+   },
+   "scoreRankCorr": 0.2575
+  },
+  "2021": {
+   "days": 236,
+   "alstm": {
+    "rankIC": 0.010041,
+    "rankICIR": 1.7839
+   },
+   "master": {
+    "rankIC": 0.00289,
+    "rankICIR": 0.3016
+   },
+   "dee2": {
+    "rankIC": 0.008752,
+    "rankICIR": 1.1156
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.001289,
+    "relative": -0.1284,
+    "naivePairedT": -0.208,
+    "positiveDayShare": 0.5424
+   },
+   "scoreRankCorr": 0.1354
+  },
+  "2022": {
+   "days": 235,
+   "alstm": {
+    "rankIC": 0.008641,
+    "rankICIR": 1.1687
+   },
+   "master": {
+    "rankIC": 0.002639,
+    "rankICIR": 0.2813
+   },
+   "dee2": {
+    "rankIC": 0.007519,
+    "rankICIR": 0.8828
+   },
+   "dee2_minus_alstm": {
+    "mean": -0.001121,
+    "relative": -0.1298,
+    "naivePairedT": -0.189,
+    "positiveDayShare": 0.5277
+   },
+   "scoreRankCorr": 0.2014
+  }
+ },
+ "nonnegativeYears": 4,
+ "fullDeeResourceGate": false,
+ "productionChange": false,
+ "note": "2015-2022 only; no evidence about 2023-2026 until MASTER folds 8-11 are trained"
+}
