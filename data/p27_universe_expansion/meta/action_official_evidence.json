@@ -1,0 +1,18 @@
+{
+  "schema": "p27_official_action_evidence_v1",
+  "events": [
+    {
+      "instrument": "SH601966",
+      "ex_date": "2025-07-10",
+      "pay_date": "2025-07-10",
+      "cash_div": 0.084,
+      "stk_div": 0.0,
+      "candidate_components": [0.07],
+      "official_components": [0.014, 0.07],
+      "announcement": "山东玲珑轮胎股份有限公司2024年第四季度、2025年一季度权益分派实施公告",
+      "announcement_number": "2025-044",
+      "url": "https://stock.stockstar.com/notice/SN2025070300000444.shtml",
+      "verbatim": "A股每股现金红利0.084元，为2024年第四季度和2025年一季度合并后的分配比例，其中2024年第四季度每股派发现金红利0.014元（含税）；2025年一季度每股派发现金红利0.07元（含税）"
+    }
+  ]
+}

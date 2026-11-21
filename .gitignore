@@ -19,3 +19,19 @@ mlflow.db
 
 # 流水线运行事件日志
 chain_events/
+
+# 本地依赖、第三方源码与技能副本（不作为本项目产物提交）
+.deps/
+.bin/
+qlib-repo/
+master-repo/
+claude-trading-skills/
+qs-skills/
+stock-analyze-skills/
+stock-data/
+
+# 本机抢救证据与临时调试脚本
+recovery/
+debug_fetch_one.py
+inspect_dividend_records.py
+inspect_dividend_conflict.py
